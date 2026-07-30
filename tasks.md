@@ -20,13 +20,20 @@
 - [ ] Create API for fetching `ParkingSessions` (active, history).
 
 ## Phase 4: MQTT Integration (Backend)
-- [ ] Set up MQTT.js client to connect to a public broker (e.g., `test.mosquitto.org`).
-- [ ] Subscribe to topic: `parking/gate/scan`.
-- [ ] Implement Scan Logic:
-  - When UID is received, check if there is an active session (`status: 'IN'`).
-  - If NO active session: Create new session (`status: 'IN'`), publish to `parking/gate/control` (message: 'OPEN_IN').
-  - If ACTIVE session: Update session `status` to 'PENDING_PAYMENT' (or 'OUT' if VIP), calculate fee if guest. Publish 'OPEN_OUT' if fully paid or VIP.
-- [ ] Implement Manual Gate Control API (`POST /api/gate/open`) that publishes to `parking/gate/control`.
+- [ ] Set up MQTT.js client to connect to local broker (`mqtt://127.0.0.1`).
+- [ ] Subscribe to topics:
+  - `parking/group17/rfid/scan`
+  - `parking/group17/gate/status`
+  - `parking/group17/system/status`
+- [ ] Implement RFID Scan Logic (`rfid/scan`):
+  - Parse `{ eventId, deviceId, uid, lane }`.
+  - Check `ParkingSession` status.
+  - Publish `{ requestId, deviceId, messageType, source, lane, action: "open" }` to `parking/group17/gate/command`.
+- [ ] Implement Gate Status Logic (`gate/status`):
+  - Handle `status` changes (`opening`, `open`, `closing`, `closed`).
+- [ ] Implement System Status Logic (`system/status`):
+  - Track ESP32 `online` / `offline` (Last Will).
+- [ ] Implement Manual Gate Control API (`POST /api/gate/command`).
 
 ## Phase 5: Frontend Development (React + Tailwind)
 - [ ] Setup Routing (`react-router-dom`): `/login`, `/dashboard`, `/checkout`.
