@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-07-31T12:12:35.131Z",
+  "topic": "parking/group17/system/status",
+  "rawMessage": "{\"deviceId\":\"esp32-01\",\"messageType\":\"status\",\"status\":\"online\",\"uptimeMs\":2698}",
+  "parsedData": {
+    "deviceId": "esp32-01",
+    "messageType": "status",
+    "status": "online",
+    "uptimeMs": 2698
+  },
+  "error": null
+}

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParkingRealtime } from "../hooks/useParkingRealtime";
+import axios from "axios";
 import {
   LayoutDashboard,
   CreditCard,
@@ -61,14 +63,22 @@ const STATUS_STYLES = {
   IDLE: "bg-slate-100 text-slate-500 border border-slate-200",
   SCANNING: "bg-sky-50 text-sky-600 border border-sky-200",
   OPEN: "bg-emerald-50 text-emerald-600 border border-emerald-200",
+  OPENING: "bg-amber-50 text-amber-600 border border-amber-200",
+  CLOSING: "bg-amber-50 text-amber-600 border border-amber-200",
+  CLOSED: "bg-slate-100 text-slate-600 border border-slate-200",
   DENIED: "bg-red-50 text-red-600 border border-red-200",
+  ERROR: "bg-red-50 text-red-600 border border-red-200",
 };
 
 const STATUS_DOT = {
   IDLE: "bg-slate-400",
   SCANNING: "bg-sky-500 animate-pulse",
   OPEN: "bg-emerald-500 animate-pulse",
+  OPENING: "bg-amber-500 animate-pulse",
+  CLOSING: "bg-amber-500 animate-pulse",
+  CLOSED: "bg-slate-500",
   DENIED: "bg-red-500",
+  ERROR: "bg-red-500",
 };
 
 function LaneCard({ title, type, state, onManualOpen }) {
@@ -164,32 +174,80 @@ const CustomTooltip = ({ active, payload, label }) => {
   }
   return null;
 };
+function convertMqttStatus(status) {
+  switch (status?.toLowerCase()) {
+    case "opened":
+    case "open":
+      return "OPEN";
 
+    case "opening":
+      return "OPENING";
+
+    case "closing":
+      return "CLOSING";
+
+    case "closed":
+      return "CLOSED";
+
+    case "denied":
+      return "DENIED";
+
+    case "error":
+      return "ERROR";
+
+    default:
+      return "IDLE";
+  }
+}
 export default function Dashboard() {
   const [activeNav, setActiveNav] = useState("Overview");
   const [notifications] = useState(3);
 
-  const [entryLane, setEntryLane] = useState({
-    uid: "A3:F2:9C:1D",
-    status: "SCANNING",
-    fee: "₱ 0.00",
-    lastScan: "14:32:07",
-  });
+  const {
+    isBackendConnected,
+    entryLane,
+    exitLane,
+    mqttMessages,
+    setEntryLane,
+    setExitLane,
+  } = useParkingRealtime();
 
-  const [exitLane, setExitLane] = useState({
-    uid: "B7:01:4E:82",
-    status: "OPEN",
-    fee: "₱ 45.00",
-    lastScan: "14:31:55",
-  });
+  const [activeSessions, setActiveSessions] = useState([]);
 
-  const handleManualOpen = (lane) => {
-    const setter = lane === "entry" ? setEntryLane : setExitLane;
-    setter((prev) => ({ ...prev, status: "OPEN" }));
-    setTimeout(() => {
-      setter((prev) => ({ ...prev, status: "IDLE", uid: "—", fee: "₱ 0.00" }));
-    }, 3000);
+  const fetchActiveSessions = async () => {
+    try {
+      const res = await axios.get("http://localhost:3000/api/sessions/active");
+      setActiveSessions(res.data);
+    } catch (err) {
+      console.error("Lỗi khi tải danh sách phiên hoạt động:", err.message);
+    }
   };
+
+  const handlePaySession = async (sessionId) => {
+    try {
+      await axios.post("http://localhost:3000/api/sessions/pay", { sessionId });
+      fetchActiveSessions();
+    } catch (err) {
+      console.error("Lỗi khi thanh toán:", err.message);
+    }
+  };
+
+  const handleManualOpen = async (lane) => {
+    try {
+      const gateLane = lane === "entry" ? "in" : "out";
+      await axios.post("http://localhost:3000/api/gate/command", {
+        lane: gateLane,
+        action: "open"
+      });
+      console.log(`Lệnh mở cổng thủ công đã gửi thành công cho làn: ${gateLane}`);
+    } catch (err) {
+      console.error("Lỗi khi gửi lệnh mở cổng thủ công:", err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveSessions();
+  }, [entryLane.lastScan, exitLane.lastScan]);
 
   return (
     <div
@@ -221,11 +279,10 @@ export default function Dashboard() {
                 key={label}
                 type="button"
                 onClick={() => setActiveNav(label)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left w-full ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left w-full ${isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 {label}
@@ -300,12 +357,31 @@ export default function Dashboard() {
                 Monday, July 14, 2026 — Real-time monitoring active
               </p>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-semibold text-emerald-600">System Online</span>
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${isBackendConnected
+                ? "bg-emerald-50 border-emerald-200"
+                : "bg-red-50 border-red-200"
+                }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${isBackendConnected
+                  ? "bg-emerald-500 animate-pulse"
+                  : "bg-red-500"
+                  }`}
+              />
+
+              <span
+                className={`text-[11px] font-semibold ${isBackendConnected
+                  ? "text-emerald-600"
+                  : "text-red-600"
+                  }`}
+              >
+                {isBackendConnected
+                  ? "Backend Connected"
+                  : "Backend Disconnected"}
+              </span>
             </div>
           </div>
-
           {/* Stat cards row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {STAT_CARDS.map(({ label, value, delta, icon: Icon, color }) => (
@@ -400,6 +476,81 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
 
+          {/* Active Sessions & MQTT Logs */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-2">
+            {/* Active Sessions Table */}
+            <div className="xl:col-span-2 bg-card border border-border rounded-xl px-6 py-5 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Active Parking Sessions</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Vehicles currently parked or pending payment</p>
+                </div>
+                <button
+                  onClick={fetchActiveSessions}
+                  className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold">
+                      <th className="py-2.5 pb-2">Card UID</th>
+                      <th className="py-2.5 pb-2">Time In</th>
+                      <th className="py-2.5 pb-2">Status</th>
+                      <th className="py-2.5 pb-2">Current Fee</th>
+                      <th className="py-2.5 pb-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-foreground">
+                    {activeSessions.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          No active parking sessions
+                        </td>
+                      </tr>
+                    ) : (
+                      activeSessions.map((session) => (
+                        <tr key={session._id} className="hover:bg-secondary/40 transition-colors">
+                          <td className="py-3 font-mono font-medium tracking-wide">{session.uid}</td>
+                          <td className="py-3 text-muted-foreground">
+                            {new Date(session.time_in).toLocaleString()}
+                          </td>
+                          <td className="py-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${session.status === "IN"
+                              ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                              : "bg-amber-50 text-amber-600 border border-amber-200"
+                              }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${session.status === "IN" ? "bg-emerald-500" : "bg-amber-500 animate-pulse"
+                                }`} />
+                              {session.status}
+                            </span>
+                          </td>
+                          <td className="py-3 font-semibold font-mono">
+                            {session.fee > 0 ? `₱ ${session.fee.toFixed(2)}` : "₱ 0.00"}
+                          </td>
+                          <td className="py-3 text-right">
+                            {session.status === "PENDING_PAYMENT" ? (
+                              <button
+                                onClick={() => handlePaySession(session._id)}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold rounded active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-amber-500/10"
+                              >
+                                Pay & Open Exit
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground text-[11px]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
           <div className="h-2" />
         </main>
       </div>
