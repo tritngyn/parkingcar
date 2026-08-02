@@ -50,8 +50,8 @@ async function initializeDatabase() {
 // CƠ CHẾ BACKUP IN-MEMORY KHI CHƯA CÓ DATABASE
 const inMemoryStore = {
   cards: [
-    { uid: "GUEST123", type: "GUEST", createdAt: new Date() },
-    { uid: "VIP789", type: "VIP", createdAt: new Date() }
+    { uid: "GUEST123", balance: 0, createdAt: new Date() },
+    { uid: "VIP789", balance: 100, createdAt: new Date() }
   ],
   sessions: []
 };
@@ -307,7 +307,7 @@ app.get("/api/cards", async (req, res) => {
 
 app.post("/api/cards", async (req, res) => {
   try {
-    const { uid, type } = req.body;
+    const { uid, balance } = req.body;
     if (!uid) {
       return res.status(400).json({ success: false, message: "Thiếu UID của thẻ" });
     }
@@ -315,7 +315,7 @@ app.post("/api/cards", async (req, res) => {
     if (existingCard) {
       return res.status(400).json({ success: false, message: "Thẻ UID này đã được đăng ký trước đó" });
     }
-    const card = await db.cards.save({ uid, type });
+    const card = await db.cards.save({ uid, balance: balance || 0 });
     res.status(201).json({ success: true, data: card });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

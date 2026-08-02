@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParkingRealtime } from "../hooks/useParkingRealtime";
-import axios from "axios";
+import api from "../api";
 import {
   LayoutDashboard,
   CreditCard,
@@ -216,7 +216,7 @@ export default function Dashboard() {
 
   const fetchActiveSessions = async () => {
     try {
-      const res = await axios.get("http://localhost:3000/api/sessions/active");
+      const res = await api.get("/sessions/active");
       setActiveSessions(res.data);
     } catch (err) {
       console.error("Lỗi khi tải danh sách phiên hoạt động:", err.message);
@@ -225,7 +225,7 @@ export default function Dashboard() {
 
   const handlePaySession = async (sessionId) => {
     try {
-      await axios.post("http://localhost:3000/api/sessions/pay", { sessionId });
+      await api.post("/sessions/pay", { sessionId });
       fetchActiveSessions();
     } catch (err) {
       console.error("Lỗi khi thanh toán:", err.message);
@@ -235,7 +235,7 @@ export default function Dashboard() {
   const handleManualOpen = async (lane) => {
     try {
       const gateLane = lane === "entry" ? "in" : "out";
-      await axios.post("http://localhost:3000/api/gate/command", {
+      await api.post("/gate/command", {
         lane: gateLane,
         action: "open"
       });

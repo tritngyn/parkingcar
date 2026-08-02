@@ -112,11 +112,11 @@ async function handleRFIDScan(message, io) {
 
   console.log(`Đang xử lý thẻ UID=${uid}`);
 
-  // Tìm thông tin thẻ (để biết VIP hay GUEST)
+  // Tìm thông tin thẻ
   let card = await Card.findOne({ uid });
   if (!card) {
-    card = await Card.create({ uid, type: "GUEST" });
-    console.log(`Tự động đăng ký thẻ mới UID: ${uid} làm GUEST`);
+    card = await Card.create({ uid, balance: 0 });
+    console.log(`Tự động đăng ký thẻ mới UID: ${uid} với balance=0`);
   }
 
   // Tìm phiên đỗ xe đang hoạt động (status = active)
@@ -137,13 +137,9 @@ async function handleRFIDScan(message, io) {
   } else {
     // XE RA
     lane = "out";
-    if (card.type === "VIP") {
-      rfidStatus = "OPEN";
-      await handleVehicleExitVIP({ uid, eventId, deviceId, activeSession, io });
-    } else {
-      rfidStatus = "PENDING_PAYMENT";
-      fee = await handleVehicleExitGuest({ uid, eventId, deviceId, activeSession, io });
-    }
+    const result = await handleVehicleExit({ uid, eventId, deviceId, card, activeSession, io });
+    rfidStatus = result.rfidStatus;
+    fee = result.fee;
   }
 
   // Gửi Socket.io thông báo sự kiện quét thẻ lên giao diện
@@ -195,48 +191,46 @@ async function handleVehicleEntry({ uid, eventId, deviceId }) {
 }
 
 /**
- * Xe VIP ra.
+ * Xe ra (xử lý chung theo số dư balance).
  */
-async function handleVehicleExitVIP({ uid, eventId, deviceId, activeSession, io }) {
-  const exitTime = new Date();
-  activeSession.status = "completed";
-  activeSession.exitTime = exitTime;
-  activeSession.exitDeviceId = deviceId;
-  activeSession.exitEventId = eventId;
-  activeSession.fee = 0;
-  await activeSession.save();
-
-  console.log(`XE RA VIP: UID=${uid}`);
-
-  sendGateCommand({
-    lane: "out",
-    action: "open",
-    uid,
-    requestId: eventId,
-    source: "backend",
-  });
-
-  updateLatestGateStatus("out", "OPEN", "mqtt", uid, 0, io);
-}
-
-/**
- * Xe GUEST ra.
- */
-async function handleVehicleExitGuest({ uid, eventId, deviceId, activeSession, io }) {
+async function handleVehicleExit({ uid, eventId, deviceId, card, activeSession, io }) {
   const exitTime = new Date();
   const parkedMilliseconds = exitTime.getTime() - activeSession.entryTime.getTime();
   const parkedHours = Math.max(1, Math.ceil(parkedMilliseconds / (60 * 60 * 1000)));
-  const pricePerHour = 20; // 20 PHP/giờ
+  const pricePerHour = 20; 
   const fee = parkedHours * pricePerHour;
 
-  // Cập nhật phí nhưng không hoàn thành (giữ active để chờ thanh toán)
   activeSession.fee = fee;
-  await activeSession.save();
+  activeSession.exitTime = exitTime;
+  activeSession.exitDeviceId = deviceId;
+  activeSession.exitEventId = eventId;
 
-  console.log(`XE RA GUEST (YÊU CẦU THANH TOÁN): UID=${uid}, fee=${fee}`);
+  // Lấy balance từ db / card model
+  const balance = card.balance || 0;
 
-  updateLatestGateStatus("out", "PENDING_PAYMENT", "mqtt", uid, fee, io);
-  return fee;
+  if (balance >= fee) {
+    // Tự động trừ tiền
+    card.balance -= fee;
+    if (card.save && typeof card.save === "function") await card.save();
+    
+    activeSession.status = "completed";
+    await activeSession.save();
+
+    console.log(`XE RA (TỰ ĐỘNG TRỪ TIỀN): UID=${uid}, trừ ${fee}`);
+
+    sendGateCommand({ lane: "out", action: "open", uid, requestId: eventId, source: "backend" });
+    updateLatestGateStatus("out", "OPEN", "mqtt", uid, 0, io);
+    return { rfidStatus: "OPEN", fee: 0 };
+  } else {
+    // Thiếu tiền, giữ session active để chờ thanh toán
+    activeSession.status = "active";
+    await activeSession.save();
+
+    console.log(`XE RA (YÊU CẦU THANH TOÁN): UID=${uid}, fee=${fee}`);
+
+    updateLatestGateStatus("out", "PENDING_PAYMENT", "mqtt", uid, fee, io);
+    return { rfidStatus: "PENDING_PAYMENT", fee };
+  }
 }
 
 /**
