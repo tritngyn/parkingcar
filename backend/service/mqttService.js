@@ -84,13 +84,12 @@ function sendGateCommand({
   }
 
   return publishJson(TOPIC_GATE_COMMAND, {
-    messageType: "command", // Khớp với Arduino check: strcmp(messageType, "command") == 0
-    requestId,
-    source,
-    action,
-    lane,
-    uid,
-    timestamp: new Date().toISOString(),
+    messageType: "command",
+    lane: lane,
+    action: action,
+    source: source,
+    uid: uid,
+    requestId: requestId || `backend-req-${Date.now()}`
   });
 }
 
@@ -110,7 +109,13 @@ async function handleRFIDScan(message, io) {
     return;
   }
 
-  console.log(`Đang xử lý thẻ UID=${uid}`);
+  const VALID_UIDS = ["A288F506", "39B21405"]; // Dữ liệu thẻ hợp lệ (Mock DB)
+  if (!VALID_UIDS.includes(uid)) {
+    console.warn(`Access Denied: Thẻ UID=${uid} không nằm trong danh sách cho phép.`);
+    return;
+  }
+
+  console.log(`Đang xử lý thẻ hợp lệ UID=${uid}`);
 
   // Tìm thông tin thẻ
   let card = await Card.findOne({ uid });
