@@ -443,15 +443,59 @@ app.post("/api/sessions/pay", async (req, res) => {
 
 app.post("/api/gate/command", async (req, res) => {
   try {
-    const { lane, action } = req.body; // lane: "in"/"out", action: "open"/"close"
+    const { lane, action, uid } = req.body; // lane: "in"/"out", action: "open"/"close", uid (từ giao diện gửi xuống)
     if (!lane || !action) {
       return res.status(400).json({ success: false, message: "Thiếu lane hoặc action" });
     }
 
+    const commandUid = uid || "MANUAL";
+
+    // 1. Logic Database: Ghi nhận lịch sử xe vào/ra nếu action là open
+    if (action === "open") {
+      try {
+        if (lane === "out") {
+          // Mở cổng ra: Chốt session (thu tiền mặt hoặc cho xe ra miễn phí)
+          const activeSessions = await db.sessions.findActiveAll();
+          let sessionToClose = activeSessions.find(s => s.uid === commandUid);
+          
+          if (!sessionToClose && commandUid === "MANUAL") {
+             // Fallback: nếu bấm chay không có UID, thử chốt xe đỗ lâu nhất
+             sessionToClose = activeSessions[activeSessions.length - 1]; 
+          }
+
+          if (sessionToClose) {
+            sessionToClose.status = "completed";
+            sessionToClose.exitTime = new Date();
+            sessionToClose.exitDeviceId = "manual-api";
+            if (!sessionToClose.fee) sessionToClose.fee = 0; // thanh toán thủ công (ví dụ bằng tiền mặt)
+            await db.sessions.save(sessionToClose);
+            console.log(`Đã chốt phiên đỗ xe cho thẻ ${sessionToClose.uid} (Mở cổng ra thủ công)`);
+          }
+        } else if (lane === "in") {
+          // Mở cổng vào: Tạo session mới nếu chưa có
+          const activeSessions = await db.sessions.findActiveAll();
+          const alreadyActive = activeSessions.find(s => s.uid === commandUid);
+          if (!alreadyActive) {
+            await db.sessions.save({
+              uid: commandUid,
+              status: "active",
+              entryTime: new Date(),
+              fee: 0,
+              entryDeviceId: "manual-api"
+            });
+            console.log(`Đã tạo phiên đỗ xe mới cho thẻ ${commandUid} (Mở cổng vào thủ công)`);
+          }
+        }
+      } catch (dbErr) {
+        console.error("Lỗi cập nhật DB khi mở cổng thủ công:", dbErr);
+      }
+    }
+
+    // 2. Gửi MQTT xuống ESP32 với mã thẻ thật
     const commandSent = sendGateCommand({
       lane: lane,
       action: action,
-      uid: "MANUAL",
+      uid: commandUid,
       requestId: `manual-${Date.now()}`,
       source: "backend"
     });
@@ -462,7 +506,7 @@ app.post("/api/gate/command", async (req, res) => {
       );
     } else {
       console.log(
-        `Đã gửi lệnh điều khiển cổng thủ công (${lane} -> ${action})`
+        `Đã gửi lệnh điều khiển cổng thủ công (${lane} -> ${action}) cho thẻ ${commandUid}`
       );
     }
 
@@ -470,13 +514,13 @@ app.post("/api/gate/command", async (req, res) => {
     latestData.gates[lane] = {
       status: action.toUpperCase(),
       source: "manual-api",
-      uid: "MANUAL",
+      uid: commandUid,
       receivedAt: receivedAt
     };
 
     io.emit("gate-status", {
       topic: "parking/group17/gate/status",
-      data: { lane: lane, status: action, source: "manual-api" },
+      data: { lane: lane, status: action, source: "manual-api", uid: commandUid },
       receivedAt: receivedAt
     });
 

@@ -34,30 +34,7 @@ const NAV_LINKS = [
   { label: "System Settings", icon: Settings, active: false },
 ];
 
-const hourlyData = [
-  { hour: "06:00", entries: 4, exits: 2, revenue: 12 },
-  { hour: "07:00", entries: 12, exits: 6, revenue: 36 },
-  { hour: "08:00", entries: 28, exits: 11, revenue: 84 },
-  { hour: "09:00", entries: 22, exits: 18, revenue: 66 },
-  { hour: "10:00", entries: 15, exits: 14, revenue: 45 },
-  { hour: "11:00", entries: 18, exits: 16, revenue: 54 },
-  { hour: "12:00", entries: 31, exits: 24, revenue: 93 },
-  { hour: "13:00", entries: 26, exits: 29, revenue: 78 },
-  { hour: "14:00", entries: 20, exits: 22, revenue: 60 },
-  { hour: "15:00", entries: 17, exits: 19, revenue: 51 },
-  { hour: "16:00", entries: 24, exits: 21, revenue: 72 },
-  { hour: "17:00", entries: 33, exits: 27, revenue: 99 },
-  { hour: "18:00", entries: 29, exits: 32, revenue: 87 },
-  { hour: "19:00", entries: 14, exits: 18, revenue: 42 },
-  { hour: "20:00", entries: 8, exits: 12, revenue: 24 },
-];
-
-const STAT_CARDS = [
-  { label: "Total Vehicles Today", value: "247", delta: "+12 since yesterday", icon: Car, color: "text-sky-400" },
-  { label: "Active Sessions", value: "84", delta: "Currently parked", icon: Activity, color: "text-emerald-400" },
-  { label: "Today's Revenue", value: "₱ 8,430", delta: "+₱ 920 vs yesterday", icon: Zap, color: "text-amber-400" },
-  { label: "Avg. Duration", value: "2h 14m", delta: "Per vehicle session", icon: Clock, color: "text-violet-400" },
-];
+// Dữ liệu phân tích và biểu đồ sẽ được lấy từ Backend API thay vì Hardcode.
 
 const STATUS_STYLES = {
   IDLE: "bg-slate-100 text-slate-500 border border-slate-200",
@@ -213,6 +190,13 @@ export default function Dashboard() {
   } = useParkingRealtime();
 
   const [activeSessions, setActiveSessions] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [analytics, setAnalytics] = useState({
+    totalVehicles: 0,
+    activeSessionsCount: 0,
+    todayRevenue: 0,
+    avgDuration: "0h 0m",
+  });
 
   const fetchActiveSessions = async () => {
     try {
@@ -220,6 +204,82 @@ export default function Dashboard() {
       setActiveSessions(res.data);
     } catch (err) {
       console.error("Lỗi khi tải danh sách phiên hoạt động:", err.message);
+    }
+  };
+
+  const fetchAllSessionsAndAggregate = async () => {
+    try {
+      const res = await api.get("/sessions");
+      const sessions = res.data;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let totalVehicles = 0;
+      let activeCount = 0;
+      let todayRevenue = 0;
+      let totalDurationMs = 0;
+      let completedCount = 0;
+
+      const hourlyObj = {};
+      for (let i = 0; i < 24; i++) {
+        const hourStr = i.toString().padStart(2, '0') + ":00";
+        hourlyObj[hourStr] = { hour: hourStr, entries: 0, exits: 0, revenue: 0 };
+      }
+
+      sessions.forEach(session => {
+        const entryDate = new Date(session.time_in);
+        const isToday = entryDate >= today;
+        
+        if (isToday) {
+          totalVehicles++;
+          const entryHour = entryDate.getHours().toString().padStart(2, '0') + ":00";
+          if(hourlyObj[entryHour]) hourlyObj[entryHour].entries++;
+        }
+
+        if (session.status === "IN" || session.status === "PENDING_PAYMENT") {
+          activeCount++;
+        } else if (session.status === "OUT" && session.time_out) {
+          const exitDate = new Date(session.time_out);
+          const isExitToday = exitDate >= today;
+          
+          if (isExitToday) {
+            todayRevenue += (session.fee || 0);
+            const exitHour = exitDate.getHours().toString().padStart(2, '0') + ":00";
+            if(hourlyObj[exitHour]) {
+              hourlyObj[exitHour].exits++;
+              hourlyObj[exitHour].revenue += (session.fee || 0);
+            }
+          }
+
+          const durationMs = exitDate.getTime() - entryDate.getTime();
+          if (durationMs > 0) {
+            totalDurationMs += durationMs;
+            completedCount++;
+          }
+        }
+      });
+
+      let avgDurationStr = "0h 0m";
+      if (completedCount > 0) {
+        const avgMs = totalDurationMs / completedCount;
+        const hours = Math.floor(avgMs / (1000 * 60 * 60));
+        const mins = Math.floor((avgMs % (1000 * 60 * 60)) / (1000 * 60));
+        avgDurationStr = `${hours}h ${mins}m`;
+      }
+
+      setAnalytics({
+        totalVehicles,
+        activeSessionsCount: activeCount,
+        todayRevenue,
+        avgDuration: avgDurationStr
+      });
+
+      // Filter hours up to current hour to make chart look better (optional, but let's just show full day)
+      setChartData(Object.values(hourlyObj));
+
+    } catch (err) {
+      console.error("Lỗi khi tải tổng quan lịch sử:", err.message);
     }
   };
 
@@ -232,12 +292,13 @@ export default function Dashboard() {
     }
   };
 
-  const handleManualOpen = async (lane) => {
+  const handleManualOpen = async (lane, uid) => {
     try {
       const gateLane = lane === "entry" ? "in" : "out";
       await api.post("/gate/command", {
         lane: gateLane,
-        action: "open"
+        action: "open",
+        uid: uid || "MANUAL"
       });
       console.log(`Lệnh mở cổng thủ công đã gửi thành công cho làn: ${gateLane}`);
     } catch (err) {
@@ -247,6 +308,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchActiveSessions();
+    fetchAllSessionsAndAggregate();
   }, [entryLane.lastScan, exitLane.lastScan]);
 
   return (
@@ -384,18 +446,49 @@ export default function Dashboard() {
           </div>
           {/* Stat cards row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {STAT_CARDS.map(({ label, value, delta, icon: Icon, color }) => (
-              <div key={label} className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className={`w-4 h-4 ${color}`} />
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground leading-none">{label}</p>
-                  <p className="text-xl font-bold text-foreground mt-1 leading-none">{value}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{delta}</p>
-                </div>
+            <div className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                <Car className="w-4 h-4 text-sky-400" />
               </div>
-            ))}
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground leading-none">Total Vehicles Today</p>
+                <p className="text-xl font-bold text-foreground mt-1 leading-none">{analytics.totalVehicles}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Vehicles entered today</p>
+              </div>
+            </div>
+            
+            <div className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                <Activity className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground leading-none">Active Sessions</p>
+                <p className="text-xl font-bold text-foreground mt-1 leading-none">{analytics.activeSessionsCount}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Currently parked</p>
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                <Zap className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground leading-none">Today's Revenue</p>
+                <p className="text-xl font-bold text-foreground mt-1 leading-none">₱ {analytics.todayRevenue}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Earnings today</p>
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                <Clock className="w-4 h-4 text-violet-400" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground leading-none">Avg. Duration</p>
+                <p className="text-xl font-bold text-foreground mt-1 leading-none">{analytics.avgDuration}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Per completed session</p>
+              </div>
+            </div>
           </div>
 
           {/* Section label */}
@@ -412,13 +505,13 @@ export default function Dashboard() {
               title="ENTRY LANE (IN)"
               type="in"
               state={entryLane}
-              onManualOpen={() => handleManualOpen("entry")}
+              onManualOpen={() => handleManualOpen("entry", entryLane?.uid)}
             />
             <LaneCard
               title="EXIT LANE (OUT)"
               type="out"
               state={exitLane}
-              onManualOpen={() => handleManualOpen("exit")}
+              onManualOpen={() => handleManualOpen("exit", exitLane?.uid)}
             />
           </div>
 
@@ -450,7 +543,7 @@ export default function Dashboard() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={hourlyData} barGap={2} barCategoryGap="28%">
+              <BarChart data={chartData} barGap={2} barCategoryGap="28%">
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="rgba(0,0,0,0.06)"
