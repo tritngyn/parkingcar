@@ -1,406 +1,416 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParkingRealtime } from "../hooks/useParkingRealtime";
+import api from "../services/api";
 import {
-  LayoutDashboard,
-  CreditCard,
-  Settings,
-  Search,
-  Bell,
-  ChevronDown,
-  Wifi,
-  ParkingSquare,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Zap,
-  Activity,
-  DoorOpen,
-  Clock,
   Car,
+  Activity,
+  Zap,
+  Clock,
+  Wifi,
+  Lock,
+  Radio,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 
-const NAV_LINKS = [
-  { label: "Overview", icon: LayoutDashboard, active: true },
-  { label: "Card Management", icon: CreditCard, active: false },
-  { label: "System Settings", icon: Settings, active: false },
-];
-
-const hourlyData = [
-  { hour: "06:00", entries: 4, exits: 2, revenue: 12 },
-  { hour: "07:00", entries: 12, exits: 6, revenue: 36 },
-  { hour: "08:00", entries: 28, exits: 11, revenue: 84 },
-  { hour: "09:00", entries: 22, exits: 18, revenue: 66 },
-  { hour: "10:00", entries: 15, exits: 14, revenue: 45 },
-  { hour: "11:00", entries: 18, exits: 16, revenue: 54 },
-  { hour: "12:00", entries: 31, exits: 24, revenue: 93 },
-  { hour: "13:00", entries: 26, exits: 29, revenue: 78 },
-  { hour: "14:00", entries: 20, exits: 22, revenue: 60 },
-  { hour: "15:00", entries: 17, exits: 19, revenue: 51 },
-  { hour: "16:00", entries: 24, exits: 21, revenue: 72 },
-  { hour: "17:00", entries: 33, exits: 27, revenue: 99 },
-  { hour: "18:00", entries: 29, exits: 32, revenue: 87 },
-  { hour: "19:00", entries: 14, exits: 18, revenue: 42 },
-  { hour: "20:00", entries: 8, exits: 12, revenue: 24 },
-];
-
-const STAT_CARDS = [
-  { label: "Total Vehicles Today", value: "247", delta: "+12 since yesterday", icon: Car, color: "text-sky-400" },
-  { label: "Active Sessions", value: "84", delta: "Currently parked", icon: Activity, color: "text-emerald-400" },
-  { label: "Today's Revenue", value: "₱ 8,430", delta: "+₱ 920 vs yesterday", icon: Zap, color: "text-amber-400" },
-  { label: "Avg. Duration", value: "2h 14m", delta: "Per vehicle session", icon: Clock, color: "text-violet-400" },
-];
-
-const STATUS_STYLES = {
-  IDLE: "bg-slate-100 text-slate-500 border border-slate-200",
-  SCANNING: "bg-sky-50 text-sky-600 border border-sky-200",
-  OPEN: "bg-emerald-50 text-emerald-600 border border-emerald-200",
-  DENIED: "bg-red-50 text-red-600 border border-red-200",
-};
-
-const STATUS_DOT = {
-  IDLE: "bg-slate-400",
-  SCANNING: "bg-sky-500 animate-pulse",
-  OPEN: "bg-emerald-500 animate-pulse",
-  DENIED: "bg-red-500",
-};
-
-function LaneCard({ title, type, state, onManualOpen }) {
-  const Icon = type === "in" ? ArrowDownToLine : ArrowUpFromLine;
-  const iconColor = type === "in" ? "text-emerald-500" : "text-red-500";
-  const iconBg = type === "in" ? "bg-emerald-50" : "bg-red-50";
-  const borderAccent = type === "in" ? "border-emerald-100" : "border-red-100";
-
-  return (
-    <div className={`bg-card rounded-xl border border-border ${borderAccent} flex flex-col overflow-hidden`}>
-      {/* Card header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center`}>
-            <Icon className={`w-4.5 h-4.5 ${iconColor}`} strokeWidth={2} />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground leading-none">
-              Real-time
-            </p>
-            <h3 className="text-sm font-bold text-foreground mt-0.5">{title}</h3>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Wifi className="w-3.5 h-3.5 text-sky-400" />
-          <span className="text-[10px] font-medium text-sky-400 uppercase tracking-wider">Live</span>
-        </div>
-      </div>
-
-      {/* Data rows */}
-      <div className="flex flex-col gap-0 divide-y divide-border px-5 py-1">
-        <DataRow label="Scanned RFID UID">
-          <span className="font-mono text-sm text-foreground tracking-wider">
-            {state.uid || <span className="text-muted-foreground">—</span>}
-          </span>
-        </DataRow>
-        <DataRow label="Status">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[state.status]}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[state.status]}`} />
-            {state.status}
-          </span>
-        </DataRow>
-        <DataRow label="Parking Fee">
-          <span className="font-mono text-sm font-semibold text-foreground">
-            {state.fee || <span className="text-muted-foreground">—</span>}
-          </span>
-        </DataRow>
-        <DataRow label="Last Scan">
-          <span className="text-sm text-muted-foreground font-mono">{state.lastScan}</span>
-        </DataRow>
-      </div>
-
-      {/* Action button */}
-      <div className="px-5 pb-5 pt-4 mt-auto">
-        <button
-          type="button"
-          onClick={onManualOpen}
-          className="w-full h-11 flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-sky-400 active:scale-[0.98] transition-all duration-150 shadow-lg shadow-sky-500/20 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card"
-        >
-          <DoorOpen className="w-4 h-4" />
-          Manual Open Gate
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function DataRow({ label, children }) {
-  return (
-    <div className="flex items-center justify-between py-3">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-card border border-border rounded-lg px-4 py-3 shadow-xl text-xs">
-        <p className="font-semibold text-foreground mb-2">{label}</p>
-        {payload.map((p) => (
-          <div key={p.dataKey} className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} />
-            <span className="text-muted-foreground capitalize">{p.name}:</span>
-            <span className="font-semibold text-foreground">
-              {p.dataKey === "revenue" ? `₱ ${p.value}` : p.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+import Sidebar from "../components/Layout/Sidebar";
+import Header from "../components/Layout/Header";
+import StatCard from "../components/Dashboard/StatCard";
+import LaneCard from "../components/Dashboard/LaneCard";
+import RevenueChart from "../components/Dashboard/RevenueChart";
+import CardManagement from "./CardManagement";
 
 export default function Dashboard() {
   const [activeNav, setActiveNav] = useState("Overview");
-  const [notifications] = useState(3);
+  
+  // Realtime hook
+  const {
+    isBackendConnected,
+    entryLane,
+    exitLane,
+    setEntryLane,
+    setExitLane,
+  } = useParkingRealtime();
 
-  const [entryLane, setEntryLane] = useState({
-    uid: "A3:F2:9C:1D",
-    status: "SCANNING",
-    fee: "₱ 0.00",
-    lastScan: "14:32:07",
+  // State definitions
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [stats, setStats] = useState({
+    totalVehicles: 0,
+    activeSessions: 0,
+    todayRevenue: 0,
+    avgDuration: "0h 0m"
   });
 
-  const [exitLane, setExitLane] = useState({
-    uid: "B7:01:4E:82",
-    status: "OPEN",
-    fee: "₱ 45.00",
-    lastScan: "14:31:55",
-  });
+  // Settings form states (ID 5)
+  const [ssid, setSsid] = useState("HCMUS_Campus");
+  const [wifiPassword, setWifiPassword] = useState("");
+  const [showWifiPassword, setShowWifiPassword] = useState(false);
+  const [wifiConnecting, setWifiConnecting] = useState(false);
+  const [wifiSuccess, setWifiSuccess] = useState(false);
 
-  const handleManualOpen = (lane) => {
-    const setter = lane === "entry" ? setEntryLane : setExitLane;
-    setter((prev) => ({ ...prev, status: "OPEN" }));
-    setTimeout(() => {
-      setter((prev) => ({ ...prev, status: "IDLE", uid: "—", fee: "₱ 0.00" }));
-    }, 3000);
+  const fetchOverviewData = async () => {
+    try {
+      const [activeRes, allRes, chartRes] = await Promise.all([
+        api.get("/sessions/active"),
+        api.get("/sessions"),
+        api.get("/sessions/stats")
+      ]);
+      
+      setActiveSessions(activeRes.data);
+      setChartData(chartRes.data);
+      
+      // Tính toán các chỉ số thống kê động dựa trên dữ liệu thật
+      const todayStr = new Date().toDateString();
+      const todaySessions = allRes.data.filter((s) => {
+        return new Date(s.time_in).toDateString() === todayStr;
+      });
+      
+      const totalToday = todaySessions.length;
+      const activeCount = activeRes.data.length;
+      
+      const revenueToday = todaySessions
+        .filter((s) => s.status === "OUT")
+        .reduce((sum, s) => sum + (s.fee || 0), 0);
+      
+      const exitedToday = todaySessions.filter((s) => s.status === "OUT" && s.time_out);
+      let avgDurationStr = "0h 0m";
+      if (exitedToday.length > 0) {
+        const totalMs = exitedToday.reduce((sum, s) => {
+          const duration = new Date(s.time_out).getTime() - new Date(s.time_in).getTime();
+          return sum + duration;
+        }, 0);
+        const avgMs = totalMs / exitedToday.length;
+        const avgMins = Math.round(avgMs / (60 * 1000));
+        const hrs = Math.floor(avgMins / 60);
+        const mins = avgMins % 60;
+        avgDurationStr = `${hrs}h ${mins}m`;
+      }
+      
+      setStats({
+        totalVehicles: totalToday,
+        activeSessions: activeCount,
+        todayRevenue: revenueToday,
+        avgDuration: avgDurationStr
+      });
+    } catch (err) {
+      console.error("Lỗi khi tải dữ liệu overview:", err.message);
+    }
   };
+
+  const handlePaySession = async (sessionId) => {
+    try {
+      await api.post("/sessions/pay", { sessionId });
+      fetchOverviewData();
+    } catch (err) {
+      console.error("Lỗi khi thanh toán:", err.message);
+    }
+  };
+
+  const handleManualOpen = async (lane) => {
+    try {
+      const gateLane = lane === "entry" ? "in" : "out";
+      await api.post("/gate/command", {
+        lane: gateLane,
+        action: "open",
+      });
+      console.log(`Lệnh mở cổng thủ công đã gửi thành công cho làn: ${gateLane}`);
+    } catch (err) {
+      console.error("Lỗi khi gửi lệnh mở cổng thủ công:", err.message);
+    }
+  };
+
+  const handleWifiConnect = (e) => {
+    e.preventDefault();
+    setWifiConnecting(true);
+    setWifiSuccess(false);
+    
+    // Giả lập lệnh cấu hình WiFi gửi xuống ESP32
+    setTimeout(() => {
+      setWifiConnecting(false);
+      setWifiSuccess(true);
+      setWifiPassword("");
+    }, 2000);
+  };
+
+  useEffect(() => {
+    fetchOverviewData();
+  }, [entryLane.lastScan, exitLane.lastScan]);
 
   return (
     <div
       className="flex h-screen w-full bg-background overflow-hidden"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      {/* ── Sidebar ── */}
-      <aside className="w-60 shrink-0 flex flex-col bg-card border-r border-border">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <ParkingSquare className="w-5 h-5 text-primary-foreground" strokeWidth={2} />
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-bold text-foreground">ParkAdmin</p>
-            <p className="text-[10px] text-muted-foreground">Management System</p>
-          </div>
-        </div>
+      {/* Sidebar Layout */}
+      <Sidebar activeNav={activeNav} setActiveNav={setActiveNav} />
 
-        {/* Nav */}
-        <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-2 mb-2">
-            Navigation
-          </p>
-          {NAV_LINKS.map(({ label, icon: Icon }) => {
-            const isActive = activeNav === label;
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => setActiveNav(label)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left w-full ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-                {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Sidebar footer */}
-        <div className="px-5 py-4 border-t border-border">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-400 text-xs font-bold shrink-0">
-              AD
-            </div>
-            <div className="leading-tight overflow-hidden">
-              <p className="text-xs font-semibold text-foreground truncate">Admin User</p>
-              <p className="text-[10px] text-muted-foreground truncate">admin@parklot.sys</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main ── */}
+      {/* Main Content Area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top Header */}
-        <header className="h-14 shrink-0 flex items-center justify-between px-6 border-b border-border bg-card">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search plates, UIDs, sessions..."
-                className="h-8 pl-8 pr-4 w-72 rounded-lg bg-secondary border border-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring transition-all duration-150"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Bell */}
-            <button
-              type="button"
-              className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all duration-150"
-            >
-              <Bell className="w-4 h-4" />
-              {notifications > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border-2 border-card" />
-              )}
-            </button>
-            {/* Avatar */}
-            <button
-              type="button"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 transition-all duration-150"
-            >
-              <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 text-[10px] font-bold">
-                AD
-              </div>
-              <span className="text-xs font-medium text-foreground">Admin</span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </div>
-        </header>
+        {/* Header Layout */}
+        <Header isBackendConnected={isBackendConnected} />
 
-        {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
-          {/* Page title */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Overview</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Monday, July 14, 2026 — Real-time monitoring active
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-semibold text-emerald-600">System Online</span>
-            </div>
-          </div>
-
-          {/* Stat cards row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {STAT_CARDS.map(({ label, value, delta, icon: Icon, color }) => (
-              <div key={label} className="bg-card border border-border rounded-xl px-4 py-4 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className={`w-4 h-4 ${color}`} />
-                </div>
+        {/* Dynamic Page Rendering */}
+        <main className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
+          {activeNav === "Overview" && (
+            <>
+              {/* Page Title */}
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] font-medium text-muted-foreground leading-none">{label}</p>
-                  <p className="text-xl font-bold text-foreground mt-1 leading-none">{value}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{delta}</p>
+                  <h1 className="text-xl font-bold text-foreground">Overview</h1>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Real-time smart parking dashboard (Live data active)
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Section label */}
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">
-              Real-Time Lane Tracking
-            </h2>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+              {/* Stat Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <StatCard
+                  label="Total Vehicles Today"
+                  value={stats.totalVehicles}
+                  delta="+12% vs yesterday"
+                  icon={Car}
+                  color="text-sky-400"
+                />
+                <StatCard
+                  label="Active Sessions"
+                  value={stats.activeSessions}
+                  delta="Currently parked"
+                  icon={Activity}
+                  color="text-emerald-400"
+                />
+                <StatCard
+                  label="Today's Revenue"
+                  value={`₱ ${stats.todayRevenue}`}
+                  delta="+₱ 920 vs yesterday"
+                  icon={Zap}
+                  color="text-amber-400"
+                />
+                <StatCard
+                  label="Avg. Duration"
+                  value={stats.avgDuration}
+                  delta="Per vehicle session"
+                  icon={Clock}
+                  color="text-violet-400"
+                />
+              </div>
 
-          {/* Lane cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <LaneCard
-              title="ENTRY LANE (IN)"
-              type="in"
-              state={entryLane}
-              onManualOpen={() => handleManualOpen("entry")}
-            />
-            <LaneCard
-              title="EXIT LANE (OUT)"
-              type="out"
-              state={exitLane}
-              onManualOpen={() => handleManualOpen("exit")}
-            />
-          </div>
+              {/* Lane Tracking Section */}
+              <div className="flex items-center gap-3 mt-2">
+                <h2 className="text-xs font-bold text-foreground uppercase tracking-widest">
+                  Real-Time Lane Tracking
+                </h2>
+                <div className="flex-1 h-px bg-border" />
+              </div>
 
-          {/* Analytics section label */}
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">
-              Analytics
-            </h2>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <LaneCard
+                  title="ENTRY LANE (IN)"
+                  type="in"
+                  state={entryLane}
+                  onManualOpen={() => handleManualOpen("entry")}
+                />
+                <LaneCard
+                  title="EXIT LANE (OUT)"
+                  type="out"
+                  state={exitLane}
+                  onManualOpen={() => handleManualOpen("exit")}
+                />
+              </div>
 
-          {/* Bar chart card */}
-          <div className="bg-card border border-border rounded-xl px-6 py-5 pb-6">
-            <div className="flex items-start justify-between mb-5">
+              {/* Analytics Section */}
+              <div className="flex items-center gap-3 mt-2">
+                <h2 className="text-xs font-bold text-foreground uppercase tracking-widest">
+                  Analytics
+                </h2>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      Hourly Traffic & Revenue
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Today's entries, exits, and revenue statistics aggregated from MongoDB
+                    </p>
+                  </div>
+                </div>
+                <RevenueChart data={chartData} />
+              </div>
+
+              {/* Active Sessions List */}
+              <div className="bg-card border border-border rounded-xl px-6 py-5 flex flex-col shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      Active Parking Sessions
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Vehicles currently in the lot or awaiting exit payment
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchOverviewData}
+                    className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold">
+                        <th className="py-2.5 pb-2">Card UID</th>
+                        <th className="py-2.5 pb-2">Time In</th>
+                        <th className="py-2.5 pb-2">Status</th>
+                        <th className="py-2.5 pb-2">Current Fee</th>
+                        <th className="py-2.5 pb-2 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border text-foreground">
+                      {activeSessions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                            No active parking sessions in the lot
+                          </td>
+                        </tr>
+                      ) : (
+                        activeSessions.map((session) => (
+                          <tr key={session._id} className="hover:bg-secondary/40 transition-colors">
+                            <td className="py-3 font-mono font-medium tracking-wide">
+                              {session.uid}
+                            </td>
+                            <td className="py-3 text-muted-foreground">
+                              {new Date(session.time_in).toLocaleString("vi-VN")}
+                            </td>
+                            <td className="py-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                session.status === "IN"
+                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-600 border border-amber-200"
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${session.status === "IN" ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
+                                {session.status}
+                              </span>
+                            </td>
+                            <td className="py-3 font-semibold font-mono">
+                              {session.fee > 0 ? `₱ ${session.fee.toFixed(2)}` : "₱ 0.00"}
+                            </td>
+                            <td className="py-3 text-right">
+                              {session.status === "PENDING_PAYMENT" ? (
+                                <button
+                                  onClick={() => handlePaySession(session._id)}
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold rounded active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-amber-500/10"
+                                >
+                                  Pay & Open Exit
+                                </button>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeNav === "Card Management" && <CardManagement />}
+
+          {activeNav === "System Settings" && (
+            <div className="max-w-xl mx-auto w-full bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-5">
               <div>
-                <h3 className="text-sm font-bold text-foreground">Hourly Traffic & Revenue Statistics</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Today's vehicle entries, exits, and revenue by hour</p>
+                <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-primary" />
+                  ESP32 WiFi Configuration Setup (ID 5)
+                </h1>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configure local WiFi credentials for the physical parking gate controller device.
+                </p>
               </div>
-              <div className="flex items-center gap-4 text-[11px]">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-sky-500 inline-block" /> Entries
-                </span>
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-red-500/80 inline-block" /> Exits
-                </span>
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> Revenue (₱)
-                </span>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={hourlyData} barGap={2} barCategoryGap="28%">
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="rgba(0,0,0,0.06)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="hour"
-                  tick={{ fill: "#64748b", fontSize: 10, fontFamily: "Inter, sans-serif" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "#64748b", fontSize: 10, fontFamily: "Inter, sans-serif" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={32}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-                <Bar dataKey="entries" name="Entries" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="exits" name="Exits" fill="rgba(239,68,68,0.75)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="revenue" name="Revenue" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
 
-          <div className="h-2" />
+              {wifiSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-3.5 py-2.5 rounded-lg">
+                  🎉 WiFi settings connect request sent! Device will reboot automatically.
+                </div>
+              )}
+
+              <form onSubmit={handleWifiConnect} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Available SSID Networks
+                  </label>
+                  <div className="flex flex-col gap-2 border border-border rounded-lg p-2.5 bg-input-background">
+                    {[
+                      { ssidName: "HCMUS_Campus", strength: "92%", protected: true },
+                      { ssidName: "Staff_Network", strength: "78%", protected: true },
+                      { ssidName: "Guest_WiFi", strength: "65%", protected: false },
+                    ].map((network) => {
+                      const selected = ssid === network.ssidName;
+                      return (
+                        <div
+                          key={network.ssidName}
+                          onClick={() => setSsid(network.ssidName)}
+                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer text-xs font-medium transition-all ${
+                            selected
+                              ? "bg-primary/10 text-primary border border-primary/20"
+                              : "hover:bg-secondary text-muted-foreground border border-transparent"
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <Wifi className="w-3.5 h-3.5" />
+                            {network.ssidName}
+                          </span>
+                          <span className="flex items-center gap-3 text-[10px]">
+                            {network.protected && <Lock className="w-3 h-3 text-muted-foreground" />}
+                            {network.strength}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="wifi-pass" className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    WiFi Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="wifi-pass"
+                      type={showWifiPassword ? "text" : "password"}
+                      placeholder="Enter WiFi password"
+                      value={wifiPassword}
+                      onChange={(e) => setWifiPassword(e.target.value)}
+                      className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-input-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowWifiPassword((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                    >
+                      {showWifiPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={wifiConnecting}
+                  className="w-full h-10 mt-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] transition-all disabled:opacity-50"
+                >
+                  {wifiConnecting ? "Saving & Connecting..." : "Connect & Save Network"}
+                </button>
+              </form>
+            </div>
+          )}
         </main>
       </div>
     </div>

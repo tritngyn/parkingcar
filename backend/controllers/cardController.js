@@ -1,0 +1,45 @@
+const db = require("../config/dbStore");
+
+exports.getAllCards = async (req, res) => {
+  try {
+    const cards = await db.cards.find();
+    res.json(cards);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.createCard = async (req, res) => {
+  try {
+    const { uid, type } = req.body;
+    if (!uid) {
+      return res.status(400).json({ success: false, message: "Thiếu UID của thẻ" });
+    }
+    const existingCard = await db.cards.findOne({ uid });
+    if (existingCard) {
+      return res.status(400).json({
+        success: false,
+        message: "Thẻ UID này đã được đăng ký trước đó",
+      });
+    }
+    const card = await db.cards.save({ uid, type });
+    res.status(201).json({ success: true, data: card });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.deleteCard = async (req, res) => {
+  try {
+    const result = await db.cards.deleteOne(req.params.uid);
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thẻ cần xóa",
+      });
+    }
+    res.json({ success: true, message: "Xóa thẻ thành công" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
