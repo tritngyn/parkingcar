@@ -10,8 +10,8 @@
 // =====================================================
 // MQTT
 // =====================================================
-#define MQTT_SERVER "broker.emqx.io"
-#define MQTT_PORT 1883
+#define MQTT_SERVER "e2d2970e3b4a4079b87cdd8c3372fa3d.s1.eu.hivemq.cloud"
+#define MQTT_PORT 8883
 
 #define TOPIC_RFID_SCAN      "parking/group17/rfid/scan"
 #define TOPIC_GATE_COMMAND   "parking/group17/gate/command"

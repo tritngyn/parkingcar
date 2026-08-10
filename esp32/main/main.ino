@@ -1,20 +1,20 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <ESP32Servo.h>
+#include <time.h>
 
 #include "Config.h"
+#include "Secrets.h"
+#include "MqttCertificates.h"
 #include "WifiStorage.h"
 #include "WifiManager.h"
 // // ===================== WIFI =====================
 // const char* WIFI_SSID = "Khoa Tran";
 // const char* WIFI_PASSWORD = "123456789@@";
-
-// // ===================== MQTT =====================
-// const char* MQTT_SERVER = "broker.emqx.io";
-// const int MQTT_PORT = 1883;
 
 // const char* DEVICE_ID = "esp32-01";
 // const char* TOPIC_RFID_SCAN   = "parking/group17/rfid/scan";
@@ -48,9 +48,10 @@
 // #define LED_OUT_GREEN_PIN  27
 // #define LED_OUT_RED_PIN    26
 
-WiFiClient wifiClient;
+WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 String mqttClientId;
+bool mqttTLSReady = false;
 
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
@@ -228,7 +229,7 @@ void connectMQTT() {
   const char* willPayload = "{\"deviceId\":\"esp32-01\",\"messageType\":\"status\",\"status\":\"offline\"}";
   bool ok = mqttClient.connect(
     mqttClientId.c_str(),
-    nullptr, nullptr,
+    MQTT_USERNAME, MQTT_PASSWORD,
     TOPIC_SYSTEM_STATUS, 1, true, willPayload
   );
 
@@ -240,6 +241,28 @@ void connectMQTT() {
   else {
     Serial.printf("MQTT failed, state=%d\n", mqttClient.state());
   }
+}
+
+bool configureMQTTTLS() {
+  // Certificate validation requires a reasonably accurate system clock.
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Dang dong bo thoi gian cho MQTT TLS");
+
+  const unsigned long startedAt = millis();
+  while (time(nullptr) < 1700000000 && millis() - startedAt < 15000) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+
+  if (time(nullptr) < 1700000000) {
+    Serial.println("Khong dong bo duoc thoi gian; chua the xac minh TLS.");
+    return false;
+  }
+
+  wifiClient.setCACert(MQTT_ROOT_CA);
+  Serial.println("MQTT TLS san sang.");
+  return true;
 }
 
 String getUIDString() {
@@ -385,7 +408,8 @@ void setup() {
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
   if (WifiManager::isConnected()) {
-    connectMQTT();
+    mqttTLSReady = configureMQTTTLS();
+    if (mqttTLSReady) connectMQTT();
   }
   // WifiManager::clearSavedWiFi();
 }
@@ -393,11 +417,17 @@ void setup() {
 
 void loop() {
   static unsigned long lastMQTTRetry = 0;
+  static unsigned long lastTLSRetry = 0;
 
   WifiManager::loop();
   if (WifiManager::isConnected()) {
 
-    if (!mqttClient.connected() && millis() - lastMQTTRetry >= 5000) {
+    if (!mqttTLSReady && millis() - lastTLSRetry >= 15000) {
+      lastTLSRetry = millis();
+      mqttTLSReady = configureMQTTTLS();
+    }
+
+    if (mqttTLSReady && !mqttClient.connected() && millis() - lastMQTTRetry >= 5000) {
       lastMQTTRetry = millis();
       connectMQTT();
     }

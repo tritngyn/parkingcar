@@ -62,7 +62,9 @@ Hệ thống sử dụng file môi trường tại `backend/.env`. Bạn có th�
 PORT=5000
 MONGO_URI=mongodb://127.0.0.1:27017/smart_parking
 JWT_SECRET=supersecretjwtkey_change_in_production
-MQTT_BROKER=mqtt://test.mosquitto.org
+MQTT_BROKER=mqtts://your-cluster.s1.eu.hivemq.cloud:8883
+MQTT_USERNAME=your_backend_username
+MQTT_PASSWORD=your_backend_password
 ```
 
-- `MQTT_BROKER`: Broker MQTT public đang được dùng để mô phỏng ESP32 quét thẻ RFID. Để test ứng dụng, bạn có thể dùng **MQTT Explorer** kết nối tới broker `test.mosquitto.org` và gửi message vào topic `parking/gate/scan`.
+- `MQTT_BROKER`: URL TLS của HiveMQ Cloud. Backend dùng tài khoản riêng và kết nối qua cổng `8883`; ESP32 dùng cùng cluster với credential thiết bị riêng.
