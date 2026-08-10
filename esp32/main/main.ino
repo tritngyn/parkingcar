@@ -1,58 +1,62 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <ESP32Servo.h>
+#include <time.h>
 
-// ===================== WIFI =====================
-const char* WIFI_SSID = "Khoa Tran";
-const char* WIFI_PASSWORD = "123456789@@";
+#include "Config.h"
+#include "Secrets.h"
+#include "MqttCertificates.h"
+#include "WifiStorage.h"
+#include "WifiManager.h"
+// // ===================== WIFI =====================
+// const char* WIFI_SSID = "Khoa Tran";
+// const char* WIFI_PASSWORD = "123456789@@";
 
-// ===================== MQTT =====================
-const char* MQTT_SERVER = "broker.emqx.io";
-const int MQTT_PORT = 1883;
+// const char* DEVICE_ID = "esp32-01";
+// const char* TOPIC_RFID_SCAN   = "parking/group17/rfid/scan";
+// const char* TOPIC_GATE_COMMAND = "parking/group17/gate/command";
+// const char* TOPIC_GATE_STATUS  = "parking/group17/gate/status";
+// const char* TOPIC_SYSTEM_STATUS = "parking/group17/system/status";
 
-const char* DEVICE_ID = "esp32-01";
-const char* TOPIC_RFID_SCAN   = "parking/group17/rfid/scan";
-const char* TOPIC_GATE_COMMAND = "parking/group17/gate/command";
-const char* TOPIC_GATE_STATUS  = "parking/group17/gate/status";
-const char* TOPIC_SYSTEM_STATUS = "parking/group17/system/status";
 
-WiFiClient wifiClient;
+
+// // ===================== RFID RC522 =====================
+// #define RFID_SS_PIN    17
+// #define RFID_SCK_PIN   16
+// #define RFID_MOSI_PIN  4
+// #define RFID_MISO_PIN  2
+// #define RFID_RST_PIN   15
+
+
+// // ===================== SERVO =====================
+// #define SERVO_IN_PIN   25
+// #define SERVO_OUT_PIN  13
+// Servo servoIn;
+// Servo servoOut;
+
+// // ===================== BUTTON =====================
+// #define BUTTON_IN_PIN   14
+// #define BUTTON_OUT_PIN  12
+
+// // ===================== LED =====================
+// #define LED_IN_GREEN_PIN   33
+// #define LED_IN_RED_PIN     32
+// #define LED_OUT_GREEN_PIN  27
+// #define LED_OUT_RED_PIN    26
+
+WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 String mqttClientId;
+bool mqttTLSReady = false;
 
-// ===================== RFID RC522 =====================
-#define RFID_SS_PIN    17
-#define RFID_SCK_PIN   16
-#define RFID_MOSI_PIN  4
-#define RFID_MISO_PIN  2
-#define RFID_RST_PIN   15
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
-// ===================== SERVO =====================
-#define SERVO_IN_PIN   25
-#define SERVO_OUT_PIN  13
 Servo servoIn;
 Servo servoOut;
-
-// ===================== BUTTON =====================
-#define BUTTON_IN_PIN   14
-#define BUTTON_OUT_PIN  12
-
-// ===================== LED =====================
-#define LED_IN_GREEN_PIN   33
-#define LED_IN_RED_PIN     32
-#define LED_OUT_GREEN_PIN  27
-#define LED_OUT_RED_PIN    26
-
-const int GATE_CLOSED_ANGLE = 0;
-const int GATE_OPEN_ANGLE = 90;
-const unsigned long GATE_OPEN_TIME = 2000;
-const unsigned long GATE_MOVE_TIME = 500;
-const unsigned long DEBOUNCE_TIME = 200;
-const unsigned long RFID_REPEAT_DELAY = 1500;
 
 bool gateInOpen = false;
 bool gateOutOpen = false;
@@ -63,6 +67,10 @@ unsigned long lastButtonOutTime = 0;
 String lastUID = "";
 bool nextScanIsEntry = true; // Mô hình một đầu đọc: lần 1 IN, lần 2 OUT
 unsigned long lastRFIDTime = 0;
+bool rfidReady = false;
+unsigned long lastStatusPublish = 0;
+unsigned long lastRFIDRecoveryTime = 0;
+unsigned long lastRFIDHealthCheck = 0;
 
 String makeEventId() {
   return String(DEVICE_ID) + "-" + String(random(1000, 9999));
@@ -82,11 +90,14 @@ void publishSystemStatus(const char* status) {
   doc["messageType"] = "status";
   doc["status"] = status;
   doc["uptimeMs"] = millis();
+  doc["ssid"] = WiFi.SSID();
+  doc["ip"] = WiFi.localIP().toString();
+  doc["rssi"] = WiFi.RSSI();
   publishJson(TOPIC_SYSTEM_STATUS, doc, true);
 }
 
 void publishGateStatus(const char* lane, const char* status, const char* source,
-                       const String& requestId = "", const String& uid = "") {
+  const String& requestId = "", const String& uid = "") {
   if (!mqttClient.connected()) return;
   StaticJsonDocument<384> doc;
   doc["eventId"] = makeEventId();
@@ -190,52 +201,35 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (strcmp(messageType, "command") != 0) return;
 
- if (strcmp(lane, "in") == 0 && strcmp(action, "open") == 0) {
+  if (strcmp(lane, "in") == 0 && strcmp(action, "open") == 0) {
     openEntryGate(source, requestId, uid);
-  } 
+  }
   else if (strcmp(lane, "out") == 0 && strcmp(action, "open") == 0) {
     openExitGate(source, requestId, uid);
-  } 
-  else if (strcmp(lane, "in") == 0 &&strcmp(action, "close") == 0) {
+  }
+  else if (strcmp(lane, "in") == 0 && strcmp(action, "close") == 0) {
     closeEntryGate(source);
-  } 
+  }
   else if (strcmp(lane, "out") == 0 && strcmp(action, "close") == 0) {
     closeExitGate(source);
   }
   else {
-  publishGateStatus(lane, "error","system", requestId,uid );
-  
+    publishGateStatus(lane, "error", "system", requestId, uid);
+
   }
 }
 
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Connecting WiFi");
-  unsigned long started = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - started < 20000) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("WiFi OK, IP: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("WiFi failed");
-  }
-}
+
 
 void connectMQTT() {
   if (mqttClient.connected() || WiFi.status() != WL_CONNECTED) return;
   mqttClientId = "esp32-parking-" + String((uint32_t)ESP.getEfuseMac(), HEX);
 
   // Last Will: broker tự báo offline nếu ESP32 mất kết nối bất ngờ.
-  const char* willPayload = "{\"deviceId\":\"esp32-parking-01\",\"messageType\":\"status\",\"status\":\"offline\"}";
+  const char* willPayload = "{\"deviceId\":\"esp32-01\",\"messageType\":\"status\",\"status\":\"offline\"}";
   bool ok = mqttClient.connect(
     mqttClientId.c_str(),
-    nullptr, nullptr,
+    MQTT_USERNAME, MQTT_PASSWORD,
     TOPIC_SYSTEM_STATUS, 1, true, willPayload
   );
 
@@ -243,9 +237,32 @@ void connectMQTT() {
     mqttClient.subscribe(TOPIC_GATE_COMMAND, 1);
     publishSystemStatus("online");
     Serial.println("MQTT connected");
-  } else {
+  }
+  else {
     Serial.printf("MQTT failed, state=%d\n", mqttClient.state());
   }
+}
+
+bool configureMQTTTLS() {
+  // Certificate validation requires a reasonably accurate system clock.
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Dang dong bo thoi gian cho MQTT TLS");
+
+  const unsigned long startedAt = millis();
+  while (time(nullptr) < 1700000000 && millis() - startedAt < 15000) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+
+  if (time(nullptr) < 1700000000) {
+    Serial.println("Khong dong bo duoc thoi gian; chua the xac minh TLS.");
+    return false;
+  }
+
+  wifiClient.setCACert(MQTT_ROOT_CA);
+  Serial.println("MQTT TLS san sang.");
+  return true;
 }
 
 String getUIDString() {
@@ -258,16 +275,50 @@ String getUIDString() {
   return uid;
 }
 
-void handleRFID() {
-  // 1. Tự động kiểm tra và "Cấp cứu" RC522 nếu bị treo do sụt áp
+bool initRFID() {
+  digitalWrite(RFID_SS_PIN, HIGH);
+  digitalWrite(RFID_RST_PIN, HIGH);
+  delay(10);
+
+  rfid.PCD_Init();
+  delay(50);
+  rfid.PCD_AntennaOn();
+  rfid.PCD_SetAntennaGain(MFRC522::RxGain_max);
+
   byte version = rfid.PCD_ReadRegister(rfid.VersionReg);
+  Serial.printf("RC522 VersionReg: 0x%02X\n", version);
+
   if (version == 0x00 || version == 0xFF) {
-    Serial.println("RC522 bi treo, dang khoi dong lai...");
-    rfid.PCD_Init(); // Khởi tạo lại module RC522
-    delay(50);
+    Serial.println("RC522 khong phan hoi. Kiem tra nguon 3.3V va day SPI.");
+    return false;
+  }
+
+  Serial.println("RC522 san sang quet the.");
+  return true;
+}
+
+void handleRFID() {
+  unsigned long now = millis();
+
+  if (!rfidReady) {
+    if (now - lastRFIDRecoveryTime >= 2000) {
+      lastRFIDRecoveryTime = now;
+      Serial.println("Dang khoi dong lai RC522...");
+      rfidReady = initRFID();
+    }
     return;
   }
-  // 2. Kiểm tra có thẻ không
+
+  if (now - lastRFIDHealthCheck >= 5000) {
+    lastRFIDHealthCheck = now;
+    byte version = rfid.PCD_ReadRegister(rfid.VersionReg);
+    if (version == 0x00 || version == 0xFF) {
+      Serial.println("RC522 mat ket noi sau khi bat WiFi.");
+      rfidReady = false;
+      return;
+    }
+  }
+
   if (!rfid.PICC_IsNewCardPresent()) {
     return;
   }
@@ -278,13 +329,11 @@ void handleRFID() {
   }
 
   String uid = getUIDString();
-  unsigned long now = millis();
-
   // Chống một thẻ bị đọc lặp liên tục
   if (
     uid == lastUID &&
     now - lastRFIDTime < RFID_REPEAT_DELAY
-  ) {
+    ) {
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
     return;
@@ -347,30 +396,51 @@ void setup() {
   servoIn.write(GATE_CLOSED_ANGLE);
   servoOut.write(GATE_CLOSED_ANGLE);
 
+  WifiManager::begin();
+  pinMode(RFID_SS_PIN, OUTPUT);
+  pinMode(RFID_RST_PIN, OUTPUT);
+  digitalWrite(RFID_SS_PIN, HIGH);
+  digitalWrite(RFID_RST_PIN, HIGH);
   SPI.begin(RFID_SCK_PIN, RFID_MISO_PIN, RFID_MOSI_PIN, RFID_SS_PIN);
-  rfid.PCD_Init();
+  rfidReady = initRFID();
 
-  connectWiFi();
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
-  connectMQTT();
+  if (WifiManager::isConnected()) {
+    mqttTLSReady = configureMQTTTLS();
+    if (mqttTLSReady) connectMQTT();
+  }
+  // WifiManager::clearSavedWiFi();
 }
 
+
 void loop() {
-  static unsigned long lastWiFiRetry = 0;
   static unsigned long lastMQTTRetry = 0;
+  static unsigned long lastTLSRetry = 0;
 
-  if (WiFi.status() != WL_CONNECTED && millis() - lastWiFiRetry >= 10000) {
-    lastWiFiRetry = millis();
-    connectWiFi();
-  }
-  if (!mqttClient.connected() && millis() - lastMQTTRetry >= 5000) {
-    lastMQTTRetry = millis();
-    connectMQTT();
+  WifiManager::loop();
+  if (WifiManager::isConnected()) {
+
+    if (!mqttTLSReady && millis() - lastTLSRetry >= 15000) {
+      lastTLSRetry = millis();
+      mqttTLSReady = configureMQTTTLS();
+    }
+
+    if (mqttTLSReady && !mqttClient.connected() && millis() - lastMQTTRetry >= 5000) {
+      lastMQTTRetry = millis();
+      connectMQTT();
+    }
+
+    if (mqttClient.connected()) {
+      mqttClient.loop();
+      if (millis() - lastStatusPublish >= 30000) {
+        lastStatusPublish = millis();
+        publishSystemStatus("online");
+      }
+    }
   }
 
-  mqttClient.loop();
   handleButtons();
   handleRFID();
   handleAutoCloseGate();

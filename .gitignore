@@ -28,3 +28,4 @@ dist-ssr
 .env.test
 .env.production
 .env.local
+esp32/main/Secrets.h

@@ -3,8 +3,16 @@ const parkingService = require("./parkingService");
 const telegramService = require("./telegramService");
 const { getIO, latestData } = require("./socketService");
 
-// Mặc định sử dụng broker.emqx.io giống ESP32
-const MQTT_URL = process.env.MQTT_BROKER || "mqtt://broker.emqx.io:1883";
+const MQTT_URL = process.env.MQTT_BROKER;
+
+if (!MQTT_URL) {
+  throw new Error("Thiếu biến môi trường MQTT_BROKER");
+}
+
+const parsedMQTTURL = new URL(MQTT_URL);
+if (parsedMQTTURL.port === "8883" && parsedMQTTURL.protocol !== "mqtts:") {
+  throw new Error("MQTT port 8883 phải dùng giao thức mqtts:// (TLS)");
+}
 
 const TOPIC_RFID_SCAN = "parking/group17/rfid/scan";
 const TOPIC_GATE_COMMAND = "parking/group17/gate/command";
@@ -178,6 +186,7 @@ async function handleRFIDScan(message) {
         event: "exit",
         cardType: "GUEST",
         fee: result.fee,
+        balance: result.balance,
         time: new Date(), // Thời điểm quét ra
       });
     }
@@ -189,6 +198,8 @@ async function handleRFIDScan(message) {
       status: rfidStatus,
       fee: result.fee,
       cardType: result.cardType,
+      balance: result.balance,
+      hasSufficientBalance: result.hasSufficientBalance,
       receivedAt: new Date().toISOString(),
     };
 
@@ -222,6 +233,25 @@ async function handleGateStatus(message) {
   }
 }
 
+function handleSystemStatus(message) {
+  const receivedAt = new Date().toISOString();
+  latestData.device = {
+    deviceId: message.deviceId || null,
+    status: String(message.status || "offline").toLowerCase(),
+    ssid: message.ssid || null,
+    ip: message.ip || null,
+    rssi: Number.isFinite(Number(message.rssi)) ? Number(message.rssi) : null,
+    uptimeMs: Number(message.uptimeMs) || 0,
+    receivedAt,
+  };
+
+  const io = getIO();
+  if (io) {
+    io.emit("device-status", latestData.device);
+  }
+  console.log("ESP32 system status:", latestData.device);
+}
+
 /**
  * Khởi tạo MQTT.
  */
@@ -234,6 +264,8 @@ function initializeMQTT() {
 
   mqttClient = mqtt.connect(MQTT_URL, {
     clientId: `parking-backend-group17-${Date.now()}`,
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
     clean: true,
     reconnectPeriod: 5000,
     connectTimeout: 10000,
@@ -270,7 +302,7 @@ function initializeMQTT() {
       } else if (topic === TOPIC_GATE_STATUS) {
         await handleGateStatus(message);
       } else if (topic === TOPIC_SYSTEM_STATUS) {
-        console.log("ESP32 system status:", message);
+        handleSystemStatus(message);
       }
 
       if (io) {

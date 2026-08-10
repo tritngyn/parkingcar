@@ -20,7 +20,7 @@
 - [ ] Create API for fetching `ParkingSessions` (active, history).
 
 ## Phase 4: MQTT Integration (Backend)
-- [ ] Set up MQTT.js client to connect to local broker (`mqtt://127.0.0.1`).
+- [x] Set up MQTT.js client to connect securely to HiveMQ Cloud (`mqtts://...:8883`).
 - [ ] Subscribe to topics:
   - `parking/group17/rfid/scan`
   - `parking/group17/gate/status`

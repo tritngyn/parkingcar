@@ -83,7 +83,7 @@ app.get("/api/health", (req, res) => {
     },
     mqtt: {
       connected: getMQTTClient() ? getMQTTClient().connected : false,
-      broker: process.env.MQTT_BROKER || "mqtt://broker.emqx.io",
+      broker: process.env.MQTT_BROKER,
     },
   });
 });
