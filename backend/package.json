@@ -7,6 +7,7 @@
     "dev": "nodemon server.js",
     "migrate:database": "node scripts/migrateDatabase.js",
     "seed:sample": "node scripts/seedSampleData.js",
+    "test:mqtt": "node scripts/testMqttCloud.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

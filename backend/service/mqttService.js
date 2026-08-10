@@ -3,8 +3,16 @@ const parkingService = require("./parkingService");
 const telegramService = require("./telegramService");
 const { getIO, latestData } = require("./socketService");
 
-// Mặc định sử dụng broker.emqx.io giống ESP32
-const MQTT_URL = process.env.MQTT_BROKER || "mqtt://broker.emqx.io:1883";
+const MQTT_URL = process.env.MQTT_BROKER;
+
+if (!MQTT_URL) {
+  throw new Error("Thiếu biến môi trường MQTT_BROKER");
+}
+
+const parsedMQTTURL = new URL(MQTT_URL);
+if (parsedMQTTURL.port === "8883" && parsedMQTTURL.protocol !== "mqtts:") {
+  throw new Error("MQTT port 8883 phải dùng giao thức mqtts:// (TLS)");
+}
 
 const TOPIC_RFID_SCAN = "parking/group17/rfid/scan";
 const TOPIC_GATE_COMMAND = "parking/group17/gate/command";
@@ -256,6 +264,8 @@ function initializeMQTT() {
 
   mqttClient = mqtt.connect(MQTT_URL, {
     clientId: `parking-backend-group17-${Date.now()}`,
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
     clean: true,
     reconnectPeriod: 5000,
     connectTimeout: 10000,
