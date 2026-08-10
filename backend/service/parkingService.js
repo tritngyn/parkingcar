@@ -16,17 +16,37 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
   }
 
   // 1. Tìm thông tin thẻ (để biết VIP hay GUEST)
-  let card = await Card.findOne({ uid });
+  let card = await Card.findOne({ uid }).populate("owner");
   if (!card) {
-    card = await Card.create({ uid, type: "GUEST" });
-    console.log(`Tự động đăng ký thẻ mới UID: ${uid} làm GUEST`);
+    await Card.create({ uid, type: "GUEST", status: "AVAILABLE" });
+    throw new Error(`Thẻ ${uid} đã được thêm vào kho nhưng chưa được gán cho user`);
+  }
+  if (card.status !== "ASSIGNED" || !card.owner) {
+    throw new Error(`Thẻ ${uid} chưa được gán cho user`);
   }
 
   // 2. Tìm phiên đỗ xe đang hoạt động (status = active)
   const activeSession = await ParkingSession.findOne({
     uid,
-    status: "active",
+    status: { $in: ["active", "pending_payment"] },
   }).sort({ entryTime: -1 });
+
+  if (activeSession?.status === "pending_payment" || activeSession?.fee > 0) {
+    if (activeSession.status !== "pending_payment") {
+      activeSession.status = "pending_payment";
+      await activeSession.save();
+    }
+    return {
+      type: "exit_guest",
+      cardType: "GUEST",
+      fee: activeSession.fee,
+      balance: card.owner.balance,
+      hasSufficientBalance: card.owner.balance >= activeSession.fee,
+      session: activeSession,
+      uid,
+      eventId,
+    };
+  }
 
   if (!activeSession) {
     // 3. XE VÀO
@@ -34,14 +54,15 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
       uid,
       status: "active",
       entryTime: new Date(),
-      entryDeviceId: deviceId,
-      entryEventId: eventId,
+      device: deviceId,
+      direction: "IN",
     });
     console.log(`XE VÀO: UID=${uid}, session=${session._id}`);
 
     return {
       type: "entry",
       cardType: card.type,
+      balance: card.owner.balance,
       fee: 0,
       session,
       uid,
@@ -54,8 +75,8 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
     if (card.type === "VIP") {
       activeSession.status = "completed";
       activeSession.exitTime = exitTime;
-      activeSession.exitDeviceId = deviceId;
-      activeSession.exitEventId = eventId;
+      activeSession.device = deviceId;
+      activeSession.direction = "OUT";
       activeSession.fee = 0;
       await activeSession.save();
       console.log(`XE RA VIP: UID=${uid}`);
@@ -63,6 +84,7 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
       return {
         type: "exit_vip",
         cardType: "VIP",
+        balance: card.owner.balance,
         fee: 0,
         session: activeSession,
         uid,
@@ -80,12 +102,17 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
       const fee = parkedHours * pricePerHour;
 
       activeSession.fee = fee;
+      activeSession.status = "pending_payment";
+      activeSession.device = deviceId;
+      activeSession.direction = "OUT";
       await activeSession.save();
       console.log(`XE RA GUEST (YÊU CẦU THANH TOÁN): UID=${uid}, fee=${fee}`);
 
       return {
         type: "exit_guest",
         cardType: "GUEST",
+        balance: card.owner.balance,
+        hasSufficientBalance: card.owner.balance >= fee,
         fee,
         session: activeSession,
         uid,

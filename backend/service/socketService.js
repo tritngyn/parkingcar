@@ -2,6 +2,15 @@ let ioInstance = null;
 
 const latestData = {
   rfid: null,
+  device: {
+    deviceId: null,
+    status: "offline",
+    ssid: null,
+    ip: null,
+    rssi: null,
+    uptimeMs: 0,
+    receivedAt: null,
+  },
   gates: {
     in: {
       status: "unknown",

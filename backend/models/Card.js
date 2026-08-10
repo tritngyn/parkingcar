@@ -12,7 +12,19 @@ const cardSchema = new mongoose.Schema({
     enum: ['VIP', 'GUEST'],
     required: true,
     default: 'GUEST'
+  },
+  status: {
+    type: String,
+    enum: ['AVAILABLE', 'ASSIGNED'],
+    default: 'AVAILABLE',
+    index: true
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
   }
-}, { timestamps: true });
+}, { timestamps: true, versionKey: false });
 
 module.exports = mongoose.model('Card', cardSchema);

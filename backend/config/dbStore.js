@@ -37,7 +37,7 @@ const db = {
     },
     find: async () => {
       if (isDBConnected()) {
-        try { return await Card.find().sort({ createdAt: -1 }); } catch (e) { /* fallback */ }
+        try { return await Card.find().populate("owner", "fullName phone email balance").sort({ createdAt: -1 }); } catch (e) { /* fallback */ }
       }
       return [...inMemoryStore.cards].sort((a, b) => b.createdAt - a.createdAt);
     },
@@ -56,11 +56,11 @@ const db = {
         try {
           return await ParkingSession.findOne({
             uid: uid.toUpperCase(),
-            status: "active"
+            status: { $in: ["active", "pending_payment"] }
           }).sort({ entryTime: -1 });
         } catch (e) { /* fallback */ }
       }
-      return inMemoryStore.sessions.find(s => s.uid.toUpperCase() === uid.toUpperCase() && s.status === "active") || null;
+      return inMemoryStore.sessions.find(s => s.uid.toUpperCase() === uid.toUpperCase() && ["active", "pending_payment"].includes(s.status)) || null;
     },
     save: async (sessionData) => {
       if (isDBConnected()) {
@@ -97,12 +97,12 @@ const db = {
       if (isDBConnected()) {
         try {
           return await ParkingSession.find({
-            status: "active"
+            status: { $in: ["active", "pending_payment"] }
           }).sort({ entryTime: -1 });
         } catch (e) { /* fallback */ }
       }
       return inMemoryStore.sessions
-        .filter(s => s.status === "active")
+        .filter(s => ["active", "pending_payment"].includes(s.status))
         .sort((a, b) => b.entryTime - a.entryTime);
     },
     findAll: async () => {

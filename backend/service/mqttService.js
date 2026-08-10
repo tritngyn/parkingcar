@@ -178,6 +178,7 @@ async function handleRFIDScan(message) {
         event: "exit",
         cardType: "GUEST",
         fee: result.fee,
+        balance: result.balance,
         time: new Date(), // Thời điểm quét ra
       });
     }
@@ -189,6 +190,8 @@ async function handleRFIDScan(message) {
       status: rfidStatus,
       fee: result.fee,
       cardType: result.cardType,
+      balance: result.balance,
+      hasSufficientBalance: result.hasSufficientBalance,
       receivedAt: new Date().toISOString(),
     };
 
@@ -220,6 +223,25 @@ async function handleGateStatus(message) {
       receivedAt: new Date().toISOString(),
     };
   }
+}
+
+function handleSystemStatus(message) {
+  const receivedAt = new Date().toISOString();
+  latestData.device = {
+    deviceId: message.deviceId || null,
+    status: String(message.status || "offline").toLowerCase(),
+    ssid: message.ssid || null,
+    ip: message.ip || null,
+    rssi: Number.isFinite(Number(message.rssi)) ? Number(message.rssi) : null,
+    uptimeMs: Number(message.uptimeMs) || 0,
+    receivedAt,
+  };
+
+  const io = getIO();
+  if (io) {
+    io.emit("device-status", latestData.device);
+  }
+  console.log("ESP32 system status:", latestData.device);
 }
 
 /**
@@ -270,7 +292,7 @@ function initializeMQTT() {
       } else if (topic === TOPIC_GATE_STATUS) {
         await handleGateStatus(message);
       } else if (topic === TOPIC_SYSTEM_STATUS) {
-        console.log("ESP32 system status:", message);
+        handleSystemStatus(message);
       }
 
       if (io) {

@@ -11,7 +11,8 @@ exports.getAllCards = async (req, res) => {
 
 exports.createCard = async (req, res) => {
   try {
-    const { uid, type } = req.body;
+    const uid = String(req.body.uid || "").trim().toUpperCase();
+    const { type } = req.body;
     if (!uid) {
       return res.status(400).json({ success: false, message: "Thiếu UID của thẻ" });
     }
@@ -22,7 +23,7 @@ exports.createCard = async (req, res) => {
         message: "Thẻ UID này đã được đăng ký trước đó",
       });
     }
-    const card = await db.cards.save({ uid, type });
+    const card = await db.cards.save({ uid, type, status: "AVAILABLE", owner: null });
     res.status(201).json({ success: true, data: card });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

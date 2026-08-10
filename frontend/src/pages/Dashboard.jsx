@@ -30,6 +30,7 @@ export default function Dashboard() {
     exitLane,
     setEntryLane,
     setExitLane,
+    device,
   } = useParkingRealtime();
 
   // State definitions
@@ -148,7 +149,7 @@ export default function Dashboard() {
       {/* Main Content Area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Header Layout */}
-        <Header isBackendConnected={isBackendConnected} />
+        <Header isBackendConnected={isBackendConnected} device={device} />
 
         {/* Dynamic Page Rendering */}
         <main className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
