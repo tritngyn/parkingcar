@@ -117,6 +117,7 @@ export default function Dashboard() {
       await api.post("/gate/command", {
         lane: gateLane,
         action: "open",
+        uid: uid || null,
       });
       console.log(
         `Lệnh mở cổng thủ công đã gửi thành công cho làn: ${gateLane}`,
@@ -214,13 +215,13 @@ export default function Dashboard() {
                   title="Lối vào"
                   type="in"
                   state={entryLane}
-                  onManualOpen={() => handleManualOpen("entry")}
+                  onManualOpen={() => handleManualOpen("entry", entryLane.uid)}
                 />
                 <LaneCard
                   title="Lối ra"
                   type="out"
                   state={exitLane}
-                  onManualOpen={() => handleManualOpen("exit")}
+                  onManualOpen={() => handleManualOpen("exit", exitLane.uid)}
                 />
               </div>
 

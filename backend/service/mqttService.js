@@ -115,26 +115,20 @@ async function handleRFIDScan(message) {
     return;
   }
 
-  const VALID_UIDS = ["A288F506", "39B21405"]; // Dữ liệu thẻ hợp lệ (Mock DB)
-  if (!VALID_UIDS.includes(uid)) {
-    console.warn(
-      `Access Denied: Thẻ UID=${uid} không nằm trong danh sách cho phép.`,
-    );
-    return;
-  }
+  console.log(`Đang xử lý thẻ UID=${uid}`);
 
-  console.log(`Đang xử lý thẻ hợp lệ UID=${uid}`);
+  let rfidStatus = "IDLE";
+  let lane = "in";
+  let result = { fee: 0, balance: 0, cardType: "UNKNOWN", hasSufficientBalance: false };
 
   try {
     // Gọi parkingService để xử lý nghiệp vụ DB và giá cả
-    const result = await parkingService.processRFIDScan({
+    result = await parkingService.processRFIDScan({
       uid,
       eventId,
       deviceId,
     });
 
-    let rfidStatus = "IDLE";
-    let lane = "in";
 
     if (result.type === "entry") {
       lane = "in";
@@ -225,6 +219,27 @@ async function handleRFIDScan(message) {
     }
   } catch (error) {
     console.error("Lỗi khi xử lý RFID quét:", error.message);
+    // Vẫn gửi sự kiện lên Web để hiển thị thẻ bị từ chối
+    rfidStatus = "ERROR";
+    const errorRfidData = {
+      uid,
+      lane, // Mặc định hiển thị ở lối vào nếu lỗi (Hoặc có thể để frontend tự handle)
+      status: rfidStatus,
+      fee: 0,
+      cardType: "UNKNOWN",
+      balance: 0,
+      hasSufficientBalance: false,
+      receivedAt: new Date().toISOString(),
+    };
+    latestData.rfid = errorRfidData;
+    const io = getIO();
+    if (io) {
+      io.emit("rfid-scan", {
+        topic: TOPIC_RFID_SCAN,
+        data: errorRfidData,
+        receivedAt: errorRfidData.receivedAt,
+      });
+    }
   }
 }
 

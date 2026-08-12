@@ -166,6 +166,12 @@ export default function CardManagement() {
           </div>
 
           <div className="overflow-x-auto">
+            {loading ? (
+              <div className="py-12 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                Đang tải danh sách thẻ...
+              </div>
+            ) : (
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold bg-slate-50">

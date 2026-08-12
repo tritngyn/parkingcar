@@ -3,7 +3,7 @@ const { getIO, latestData } = require("../service/socketService");
 
 exports.controlGate = async (req, res) => {
   try {
-    const { lane, action } = req.body; // lane: "in"/"out", action: "open"/"close"
+    const { lane, action, uid } = req.body; // lane: "in"/"out", action: "open"/"close", uid: optional
     if (!lane || !action) {
       return res.status(400).json({
         success: false,
@@ -11,10 +11,20 @@ exports.controlGate = async (req, res) => {
       });
     }
 
+    const parkingService = require("../service/parkingService");
+    
+    if (action === "open") {
+      try {
+        await parkingService.processManualGateOpen({ lane, uid });
+      } catch (e) {
+        console.error("Lỗi khi ghi nhận mở cổng thủ công vào DB:", e.message);
+      }
+    }
+
     const commandSent = sendGateCommand({
       lane: lane,
       action: action,
-      uid: "MANUAL",
+      uid: uid || "EMERGENCY",
       requestId: `manual-${Date.now()}`,
       source: "backend",
     });

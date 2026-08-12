@@ -122,6 +122,70 @@ async function processRFIDScan({ uid, eventId, deviceId }) {
   }
 }
 
+/**
+ * Xử lý mở cổng thủ công từ giao diện Web
+ */
+async function processManualGateOpen({ lane, uid, deviceId = "WEB_MANUAL" }) {
+  uid = uid || "EMERGENCY";
+
+  if (lane === "in") {
+    // XE VÀO (Thủ công)
+    // Cố gắng tìm thẻ, nếu không có thì không sao (EMERGENCY)
+    const session = await ParkingSession.create({
+      uid,
+      status: "active",
+      entryTime: new Date(),
+      device: deviceId,
+      direction: "IN",
+    });
+    console.log(`XE VÀO (THỦ CÔNG): UID=${uid}, session=${session._id}`);
+    return session;
+  } else if (lane === "out") {
+    // XE RA (Thủ công)
+    // Nếu có uid cụ thể, tìm phiên đang active
+    if (uid !== "EMERGENCY") {
+      const activeSession = await ParkingSession.findOne({
+        uid,
+        status: { $in: ["active", "pending_payment"] },
+      }).sort({ entryTime: -1 });
+
+      if (activeSession) {
+        const exitTime = new Date();
+        const parkedMilliseconds = exitTime.getTime() - activeSession.entryTime.getTime();
+        const parkedHours = Math.max(1, Math.ceil(parkedMilliseconds / (60 * 60 * 1000)));
+        const pricePerHour = 20; // 20 VND/PHP per hour
+        
+        // Thẻ VIP thì fee = 0, còn lại tính tiền (kể cả Guest)
+        const card = await Card.findOne({ uid });
+        const fee = card?.type === "VIP" ? 0 : (parkedHours * pricePerHour);
+
+        activeSession.fee = fee;
+        activeSession.status = "completed"; // Hoàn thành luôn (thu tiền mặt / miễn phí)
+        activeSession.exitTime = exitTime;
+        activeSession.device = deviceId;
+        activeSession.direction = "OUT";
+        await activeSession.save();
+        console.log(`XE RA (THỦ CÔNG - ĐÃ GHI NHẬN DB): UID=${uid}, fee=${fee}`);
+        return activeSession;
+      }
+    }
+
+    // Nếu UID là EMERGENCY hoặc không tìm thấy active session, tạo 1 bản ghi hoàn tất luôn
+    const session = await ParkingSession.create({
+      uid: "EMERGENCY",
+      status: "completed",
+      entryTime: new Date(),
+      exitTime: new Date(),
+      device: deviceId,
+      direction: "OUT",
+      fee: 0, // Emergency không tính phí
+    });
+    console.log(`XE RA (THỦ CÔNG - KHẨN CẤP): session=${session._id}`);
+    return session;
+  }
+}
+
 module.exports = {
   processRFIDScan,
+  processManualGateOpen,
 };
