@@ -2,9 +2,9 @@ import { LayoutDashboard, CreditCard, Settings, ParkingSquare, LogOut } from "lu
 import { useAuth } from "../../hooks/useAuth";
 
 const NAV_LINKS = [
-  { label: "Overview", icon: LayoutDashboard },
-  { label: "Card Management", icon: CreditCard },
-  { label: "System Settings", icon: Settings },
+  { label: "Tổng quan", icon: LayoutDashboard },
+  { label: "Quản lý thẻ", icon: CreditCard },
+  { label: "Cài đặt hệ thống", icon: Settings },
 ];
 
 export default function Sidebar({ activeNav, setActiveNav }) {
@@ -19,14 +19,14 @@ export default function Sidebar({ activeNav, setActiveNav }) {
         </div>
         <div className="leading-tight">
           <p className="text-sm font-bold text-foreground">ParkAdmin</p>
-          <p className="text-[10px] text-muted-foreground">Management System</p>
+          <p className="text-[10px] text-muted-foreground">Hệ thống quản lý</p>
         </div>
       </div>
 
       {/* Nav links */}
       <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground px-2 mb-2">
-          Navigation
+          Điều hướng
         </p>
         {NAV_LINKS.map(({ label, icon: Icon }) => {
           const isActive = activeNav === label;
@@ -72,7 +72,7 @@ export default function Sidebar({ activeNav, setActiveNav }) {
           className="w-full h-9 flex items-center justify-center gap-2 rounded-lg bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-all duration-150"
         >
           <LogOut className="w-3.5 h-3.5" />
-          Log Out
+          Đăng xuất
         </button>
       </div>
     </aside>

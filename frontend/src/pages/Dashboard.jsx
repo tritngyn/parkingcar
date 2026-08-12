@@ -161,66 +161,63 @@ export default function Dashboard() {
           {activeNav === "Overview" && (
             <>
               {/* Page Title */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-bold text-foreground">
-                    Overview
-                  </h1>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Real-time smart parking dashboard (Live data active)
-                  </p>
-                </div>
+              <div className="mb-6">
+                <h1 className="text-xl font-bold text-foreground tracking-tight">
+                  Tổng quan Hệ thống
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Quản lý và giám sát bãi đỗ xe theo thời gian thực
+                </p>
               </div>
 
-              {/* Stat Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <StatCard
-                  label="Total Vehicles Today"
-                  value={stats.totalVehicles}
-                  delta="+12% vs yesterday"
                   icon={Car}
-                  color="text-sky-400"
+                  label="Tổng số xe hôm nay"
+                  value={stats.totalVehicles}
+                  color="text-primary"
                 />
                 <StatCard
-                  label="Active Sessions"
-                  value={stats.activeSessions}
-                  delta="Currently parked"
                   icon={Activity}
-                  color="text-emerald-400"
+                  label="Xe đang trong bãi"
+                  value={stats.activeSessions}
+                  color="text-emerald-500"
                 />
                 <StatCard
-                  label="Today's Revenue"
-                  value={`₱ ${stats.todayRevenue}`}
-                  delta="+₱ 920 vs yesterday"
                   icon={Zap}
-                  color="text-amber-400"
+                  label="Doanh thu hôm nay"
+                  value={new Intl.NumberFormat("vi-VN", {
+                    style: "currency",
+                    currency: "VND",
+                  }).format(stats.todayRevenue)}
+                  color="text-amber-500"
                 />
                 <StatCard
-                  label="Avg. Duration"
-                  value={stats.avgDuration}
-                  delta="Per vehicle session"
                   icon={Clock}
-                  color="text-violet-400"
+                  label="Thời gian đỗ TB"
+                  value={stats.avgDuration}
+                  color="text-purple-500"
                 />
               </div>
 
               {/* Lane Tracking Section */}
               <div className="flex items-center gap-3 mt-2">
                 <h2 className="text-xs font-bold text-foreground uppercase tracking-widest">
-                  Real-Time Lane Tracking
+                  Giám sát làn xe
                 </h2>
                 <div className="flex-1 h-px bg-border" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <LaneCard
-                  title="ENTRY LANE (IN)"
+                  title="Lối vào"
                   type="in"
                   state={entryLane}
                   onManualOpen={() => handleManualOpen("entry")}
                 />
                 <LaneCard
-                  title="EXIT LANE (OUT)"
+                  title="Lối ra"
                   type="out"
                   state={exitLane}
                   onManualOpen={() => handleManualOpen("exit")}
@@ -230,7 +227,7 @@ export default function Dashboard() {
               {/* Analytics Section */}
               <div className="flex items-center gap-3 mt-2">
                 <h2 className="text-xs font-bold text-foreground uppercase tracking-widest">
-                  Analytics
+                  Phân tích
                 </h2>
                 <div className="flex-1 h-px bg-border" />
               </div>
@@ -239,11 +236,10 @@ export default function Dashboard() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                   <div>
                     <h3 className="text-sm font-bold text-foreground">
-                      Hourly Traffic & Revenue
+                      Lưu lượng & Doanh thu
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Today's entries, exits, and revenue statistics aggregated
-                      from MongoDB
+                      Thống kê theo giờ từ cơ sở dữ liệu
                     </p>
                   </div>
                 </div>
@@ -255,17 +251,17 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-sm font-bold text-foreground">
-                      Active Parking Sessions
+                      Phiên đỗ xe hiện tại
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Vehicles currently in the lot or awaiting exit payment
+                      Danh sách các phương tiện đang trong bãi
                     </p>
                   </div>
                   <button
                     onClick={fetchOverviewData}
                     className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                   >
-                    Refresh
+                    Làm mới
                   </button>
                 </div>
 
@@ -273,11 +269,11 @@ export default function Dashboard() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold">
-                        <th className="py-2.5 pb-2">Card UID</th>
-                        <th className="py-2.5 pb-2">Time In</th>
-                        <th className="py-2.5 pb-2">Status</th>
-                        <th className="py-2.5 pb-2">Current Fee</th>
-                        <th className="py-2.5 pb-2 text-right">Actions</th>
+                        <th className="py-2.5 pb-2">UID Thẻ</th>
+                        <th className="py-2.5 pb-2">Thời gian vào</th>
+                        <th className="py-2.5 pb-2">Trạng thái</th>
+                        <th className="py-2.5 pb-2">Phí hiện tại</th>
+                        <th className="py-2.5 pb-2 text-right">Hành động</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border text-foreground">
@@ -287,7 +283,7 @@ export default function Dashboard() {
                             colSpan={5}
                             className="py-8 text-center text-muted-foreground"
                           >
-                            No active parking sessions in the lot
+                            Không có phiên đỗ xe nào
                           </td>
                         </tr>
                       ) : (
@@ -315,13 +311,16 @@ export default function Dashboard() {
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${session.status === "IN" ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`}
                                 />
-                                {session.status}
+                                {session.status === "IN" ? "Trong bãi" : "Chờ thanh toán"}
                               </span>
                             </td>
                             <td className="py-3 font-semibold font-mono">
                               {session.fee > 0
-                                ? `₱ ${session.fee.toFixed(2)}`
-                                : "₱ 0.00"}
+                                ? new Intl.NumberFormat("vi-VN", {
+                                    style: "currency",
+                                    currency: "VND",
+                                  }).format(session.fee)
+                                : "0 ₫"}
                             </td>
                             <td className="py-3 text-right">
                               {session.status === "PENDING_PAYMENT" ? (
@@ -329,7 +328,7 @@ export default function Dashboard() {
                                   onClick={() => handlePaySession(session._id)}
                                   className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold rounded active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-amber-500/10"
                                 >
-                                  Pay & Open Exit
+                                  Thanh toán
                                 </button>
                               ) : (
                                 <span className="text-muted-foreground text-[11px]">
@@ -354,18 +353,16 @@ export default function Dashboard() {
               <div>
                 <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
                   <Radio className="w-5 h-5 text-primary" />
-                  ESP32 WiFi Configuration Setup (ID 5)
+                  Cấu hình WiFi Thiết bị (ID 5)
                 </h1>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Configure local WiFi credentials for the physical parking gate
-                  controller device.
+                  Cấu hình mạng WiFi cho bộ điều khiển cổng ra vào.
                 </p>
               </div>
 
               {wifiSuccess && (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-3.5 py-2.5 rounded-lg">
-                  🎉 WiFi settings connect request sent! Device will reboot
-                  automatically.
+                  🎉 Cấu hình WiFi đã gửi! Thiết bị sẽ tự khởi động lại.
                 </div>
               )}
 
@@ -375,7 +372,7 @@ export default function Dashboard() {
               >
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Available SSID Networks
+                    Mạng WiFi khả dụng
                   </label>
                   <div className="flex flex-col gap-2 border border-border rounded-lg p-2.5 bg-input-background">
                     {[
@@ -427,13 +424,13 @@ export default function Dashboard() {
                     htmlFor="wifi-pass"
                     className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5"
                   >
-                    WiFi Password
+                    Mật khẩu WiFi
                   </label>
                   <div className="relative">
                     <input
                       id="wifi-pass"
                       type={showWifiPassword ? "text" : "password"}
-                      placeholder="Enter WiFi password"
+                      placeholder="Nhập mật khẩu"
                       value={wifiPassword}
                       onChange={(e) => setWifiPassword(e.target.value)}
                       className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-input-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
@@ -458,8 +455,8 @@ export default function Dashboard() {
                   className="w-full h-10 mt-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
                   {wifiConnecting
-                    ? "Saving & Connecting..."
-                    : "Connect & Save Network"}
+                    ? "Đang lưu cấu hình..."
+                    : "Lưu & Kết nối mạng"}
                 </button>
               </form>
             </div>

@@ -12,7 +12,7 @@ export default function Header({ isBackendConnected, device }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search plates, UIDs, sessions..."
+            placeholder="Tìm kiếm biển số, UID..."
             className="w-full h-9 pl-9 pr-4 rounded-lg border border-border bg-input-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-transparent transition-all duration-150"
           />
         </div>
@@ -26,7 +26,7 @@ export default function Header({ isBackendConnected, device }) {
         >
           <span className={`w-2 h-2 rounded-full ${device?.status === "online" ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
           <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
-            ESP {device?.status === "online" ? "Online" : "Offline"}
+            Thiết bị {device?.status === "online" ? "Online" : "Offline"}
             {device?.ssid ? ` · ${device.ssid}` : ""}
           </span>
         </div>
@@ -34,7 +34,7 @@ export default function Header({ isBackendConnected, device }) {
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/80 border border-border">
           <span className={`w-2 h-2 rounded-full ${isBackendConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
           <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">
-            {isBackendConnected ? "Connected" : "Offline"}
+            {isBackendConnected ? "Đã kết nối" : "Mất kết nối"}
           </span>
         </div>
 
