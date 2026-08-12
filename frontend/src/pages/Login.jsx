@@ -1,19 +1,27 @@
 import { useState } from "react";
 import { Eye, EyeOff, ParkingSquare, ShieldCheck } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
+  const [loginError, setLoginError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  
+  const { login } = useAuth();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // TODO: Implement actual login API call
-    console.log("Login attempt with:", username, password);
-    // Temporary redirect to dashboard
-    navigate("/dashboard");
+    setLoginError("");
+    setSubmitting(true);
+    try {
+      await login(username, password);
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -40,6 +48,13 @@ export default function Login() {
         <form onSubmit={handleLogin} className="flex flex-col gap-5">
           {/* ── Login Form ── */}
           <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 shadow-xl">
+            {/* Error Message */}
+            {loginError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-3.5 py-2.5 rounded-lg">
+                ⚠️ {loginError}
+              </div>
+            )}
+
             {/* Username */}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1.5">
@@ -87,9 +102,10 @@ export default function Login() {
             {/* Action button */}
             <button
               type="submit"
-              className="w-full h-11 mt-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background shadow-sm"
+              disabled={submitting}
+              className="w-full h-11 mt-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] disabled:opacity-50 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background shadow-sm"
             >
-              Sign In
+              {submitting ? "Signing In..." : "Sign In"}
             </button>
           </div>
         </form>

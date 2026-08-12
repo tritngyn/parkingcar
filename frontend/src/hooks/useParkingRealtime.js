@@ -16,6 +16,14 @@ export function useParkingRealtime() {
     lastScan: "—",
   });
   const [mqttMessages, setMqttMessages] = useState([]);
+  const [device, setDevice] = useState({
+    deviceId: null,
+    status: "offline",
+    ssid: null,
+    ip: null,
+    rssi: null,
+    receivedAt: null,
+  });
 
   useEffect(() => {
     function onConnect() {
@@ -52,6 +60,7 @@ export function useParkingRealtime() {
           }));
         }
       }
+      if (data.device) setDevice(data.device);
     }
 
     function onRfidScan(payload) {
@@ -103,6 +112,10 @@ export function useParkingRealtime() {
       setMqttMessages(prev => [payload, ...prev].slice(0, 50));
     }
 
+    function onDeviceStatus(payload) {
+      setDevice(payload);
+    }
+
     // Bind listeners
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
@@ -110,6 +123,7 @@ export function useParkingRealtime() {
     socket.on("rfid-scan", onRfidScan);
     socket.on("gate-status", onGateStatus);
     socket.on("mqtt-message", onMqttMessage);
+    socket.on("device-status", onDeviceStatus);
 
     // If socket is already connected when component mounts
     if (socket.connected) {
@@ -125,6 +139,7 @@ export function useParkingRealtime() {
       socket.off("rfid-scan", onRfidScan);
       socket.off("gate-status", onGateStatus);
       socket.off("mqtt-message", onMqttMessage);
+      socket.off("device-status", onDeviceStatus);
     };
   }, []);
 
@@ -133,6 +148,7 @@ export function useParkingRealtime() {
     entryLane,
     exitLane,
     mqttMessages,
+    device,
     setEntryLane,
     setExitLane,
   };

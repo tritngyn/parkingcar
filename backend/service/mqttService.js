@@ -1,9 +1,18 @@
 const mqtt = require("mqtt");
-const ParkingSession = require("../models/ParkingSession");
-const Card = require("../models/Card");
+const parkingService = require("./parkingService");
+const telegramService = require("./telegramService");
+const { getIO, latestData } = require("./socketService");
 
-// Mặc định sử dụng broker.emqx.io giống ESP32
-const MQTT_URL = process.env.MQTT_BROKER || "mqtt://broker.emqx.io:1883";
+const MQTT_URL = process.env.MQTT_BROKER;
+
+if (!MQTT_URL) {
+  throw new Error("Thiếu biến môi trường MQTT_BROKER");
+}
+
+const parsedMQTTURL = new URL(MQTT_URL);
+if (parsedMQTTURL.port === "8883" && parsedMQTTURL.protocol !== "mqtts:") {
+  throw new Error("MQTT port 8883 phải dùng giao thức mqtts:// (TLS)");
+}
 
 const TOPIC_RFID_SCAN = "parking/group17/rfid/scan";
 const TOPIC_GATE_COMMAND = "parking/group17/gate/command";
@@ -11,30 +20,27 @@ const TOPIC_GATE_STATUS = "parking/group17/gate/status";
 const TOPIC_SYSTEM_STATUS = "parking/group17/system/status";
 
 let mqttClient = null;
-let ioInstance = null;
-let latestDataRef = null;
 
 /**
  * Cập nhật latestData và gửi qua Socket.io lên Frontend
  */
-function updateLatestGateStatus(lane, status, source, uid, fee, io) {
-  if (latestDataRef) {
-    const receivedAt = new Date().toISOString();
-    latestDataRef.gates[lane] = {
-      status: status.toUpperCase(),
-      source,
-      uid,
-      fee,
-      receivedAt
-    };
+function updateLatestGateStatus(lane, status, source, uid, fee) {
+  const io = getIO();
+  const receivedAt = new Date().toISOString();
+  latestData.gates[lane] = {
+    status: status.toUpperCase(),
+    source,
+    uid,
+    fee,
+    receivedAt,
+  };
 
-    if (io) {
-      io.emit("gate-status", {
-        topic: TOPIC_GATE_STATUS,
-        data: { lane, status: status.toLowerCase(), source, uid, fee },
-        receivedAt
-      });
-    }
+  if (io) {
+    io.emit("gate-status", {
+      topic: TOPIC_GATE_STATUS,
+      data: { lane, status: status.toLowerCase(), source, uid, fee },
+      receivedAt,
+    });
   }
 }
 
@@ -61,13 +67,13 @@ function publishJson(topic, data, options = {}) {
         return;
       }
       console.log(`MQTT publish OK [${topic}]: ${payload}`);
-    }
+    },
   );
   return true;
 }
 
 /**
- * Gửi lệnh cổng cho ESP32.
+ * Gửi lệnh cổng cho ESP32 (ID 2)
  */
 function sendGateCommand({
   lane,
@@ -84,23 +90,23 @@ function sendGateCommand({
   }
 
   return publishJson(TOPIC_GATE_COMMAND, {
-    messageType: "command",
-    lane: lane,
-    action: action,
-    source: source,
-    uid: uid,
-    requestId: requestId || `backend-req-${Date.now()}`
+    messageType: "command", // Khớp với Arduino check
+    requestId,
+    source,
+    action,
+    lane,
+    uid,
+    timestamp: new Date().toISOString(),
   });
 }
 
 /**
- * Xử lý UID do ESP32 gửi lên.
+ * Xử lý UID do ESP32 gửi lên (ID 1 & ID 3)
  */
-async function handleRFIDScan(message, io) {
+async function handleRFIDScan(message) {
   const uid = String(message.uid || "")
     .trim()
     .toUpperCase();
-
   const eventId = String(message.eventId || "");
   const deviceId = String(message.deviceId || "");
 
@@ -111,163 +117,165 @@ async function handleRFIDScan(message, io) {
 
   const VALID_UIDS = ["A288F506", "39B21405"]; // Dữ liệu thẻ hợp lệ (Mock DB)
   if (!VALID_UIDS.includes(uid)) {
-    console.warn(`Access Denied: Thẻ UID=${uid} không nằm trong danh sách cho phép.`);
+    console.warn(
+      `Access Denied: Thẻ UID=${uid} không nằm trong danh sách cho phép.`,
+    );
     return;
   }
 
   console.log(`Đang xử lý thẻ hợp lệ UID=${uid}`);
 
-  // Tìm thông tin thẻ
-  let card = await Card.findOne({ uid });
-  if (!card) {
-    card = await Card.create({ uid, balance: 0 });
-    console.log(`Tự động đăng ký thẻ mới UID: ${uid} với balance=0`);
-  }
-
-  // Tìm phiên đỗ xe đang hoạt động (status = active)
-  const activeSession = await ParkingSession.findOne({
-    uid,
-    status: "active",
-  }).sort({ entryTime: -1 });
-
-  let rfidStatus = "IDLE";
-  let fee = 0;
-  let lane = "in";
-
-  if (!activeSession) {
-    // XE VÀO
-    lane = "in";
-    rfidStatus = "OPEN";
-    await handleVehicleEntry({ uid, eventId, deviceId });
-  } else {
-    // XE RA
-    lane = "out";
-    const result = await handleVehicleExit({ uid, eventId, deviceId, card, activeSession, io });
-    rfidStatus = result.rfidStatus;
-    fee = result.fee;
-  }
-
-  // Gửi Socket.io thông báo sự kiện quét thẻ lên giao diện
-  const rfidData = {
-    uid,
-    lane,
-    status: rfidStatus,
-    fee,
-    cardType: card.type,
-    receivedAt: new Date().toISOString()
-  };
-
-  if (latestDataRef) {
-    latestDataRef.rfid = rfidData;
-  }
-
-  if (io) {
-    io.emit("rfid-scan", {
-      topic: TOPIC_RFID_SCAN,
-      data: rfidData,
-      receivedAt: rfidData.receivedAt
+  try {
+    // Gọi parkingService để xử lý nghiệp vụ DB và giá cả
+    const result = await parkingService.processRFIDScan({
+      uid,
+      eventId,
+      deviceId,
     });
-  }
-}
 
-/**
- * Xe vào.
- */
-async function handleVehicleEntry({ uid, eventId, deviceId }) {
-  const session = await ParkingSession.create({
-    uid,
-    status: "active",
-    entryTime: new Date(),
-    entryDeviceId: deviceId,
-    entryEventId: eventId,
-  });
+    let rfidStatus = "IDLE";
+    let lane = "in";
 
-  console.log(`XE VÀO: UID=${uid}, session=${session._id}`);
+    if (result.type === "entry") {
+      lane = "in";
+      rfidStatus = "OPEN";
 
-  sendGateCommand({
-    lane: "in",
-    action: "open",
-    uid,
-    requestId: eventId,
-    source: "backend",
-  });
+      // 1. Mở cổng vào
+      sendGateCommand({
+        lane: "in",
+        action: "open",
+        uid,
+        requestId: eventId,
+        source: "backend",
+      });
 
-  updateLatestGateStatus("in", "OPEN", "mqtt", uid, 0, ioInstance);
-}
+      // 2. Cập nhật Socket state
+      updateLatestGateStatus("in", "OPEN", "mqtt", uid, 0);
 
-/**
- * Xe ra (xử lý chung theo số dư balance).
- */
-async function handleVehicleExit({ uid, eventId, deviceId, card, activeSession, io }) {
-  const exitTime = new Date();
-  const parkedMilliseconds = exitTime.getTime() - activeSession.entryTime.getTime();
-  const parkedHours = Math.max(1, Math.ceil(parkedMilliseconds / (60 * 60 * 1000)));
-  const pricePerHour = 20; 
-  const fee = parkedHours * pricePerHour;
+      // 3. Gửi thông báo Telegram (ID 4)
+      telegramService.sendNotification({
+        uid,
+        event: "entry",
+        cardType: result.cardType,
+        time: result.session.entryTime,
+      });
+    } else if (result.type === "exit_vip") {
+      lane = "out";
+      rfidStatus = "OPEN";
 
-  activeSession.fee = fee;
-  activeSession.exitTime = exitTime;
-  activeSession.exitDeviceId = deviceId;
-  activeSession.exitEventId = eventId;
+      // 1. Mở cổng ra cho VIP
+      sendGateCommand({
+        lane: "out",
+        action: "open",
+        uid,
+        requestId: eventId,
+        source: "backend",
+      });
 
-  // Lấy balance từ db / card model
-  const balance = card.balance || 0;
+      // 2. Cập nhật Socket state
+      updateLatestGateStatus("out", "OPEN", "mqtt", uid, 0);
 
-  if (balance >= fee) {
-    // Tự động trừ tiền
-    card.balance -= fee;
-    if (card.save && typeof card.save === "function") await card.save();
-    
-    activeSession.status = "completed";
-    await activeSession.save();
+      // 3. Gửi thông báo Telegram (ID 4)
+      telegramService.sendNotification({
+        uid,
+        event: "exit",
+        cardType: "VIP",
+        fee: 0,
+        time: result.session.exitTime,
+      });
+    } else if (result.type === "exit_guest") {
+      lane = "out";
+      rfidStatus = "PENDING_PAYMENT";
 
-    console.log(`XE RA (TỰ ĐỘNG TRỪ TIỀN): UID=${uid}, trừ ${fee}`);
+      // 1. Cập nhật Socket state (Yêu cầu thanh toán, không mở cổng ngay)
+      updateLatestGateStatus("out", "PENDING_PAYMENT", "mqtt", uid, result.fee);
 
-    sendGateCommand({ lane: "out", action: "open", uid, requestId: eventId, source: "backend" });
-    updateLatestGateStatus("out", "OPEN", "mqtt", uid, 0, io);
-    return { rfidStatus: "OPEN", fee: 0 };
-  } else {
-    // Thiếu tiền, giữ session active để chờ thanh toán
-    activeSession.status = "active";
-    await activeSession.save();
+      // 2. Gửi thông báo Telegram yêu cầu thanh toán (ID 4)
+      telegramService.sendNotification({
+        uid,
+        event: "exit",
+        cardType: "GUEST",
+        fee: result.fee,
+        balance: result.balance,
+        time: new Date(), // Thời điểm quét ra
+      });
+    }
 
-    console.log(`XE RA (YÊU CẦU THANH TOÁN): UID=${uid}, fee=${fee}`);
+    // Gửi Socket.io thông báo sự kiện quét thẻ lên giao diện
+    const rfidData = {
+      uid,
+      lane,
+      status: rfidStatus,
+      fee: result.fee,
+      cardType: result.cardType,
+      balance: result.balance,
+      hasSufficientBalance: result.hasSufficientBalance,
+      receivedAt: new Date().toISOString(),
+    };
 
-    updateLatestGateStatus("out", "PENDING_PAYMENT", "mqtt", uid, fee, io);
-    return { rfidStatus: "PENDING_PAYMENT", fee };
+    latestData.rfid = rfidData;
+
+    const io = getIO();
+    if (io) {
+      io.emit("rfid-scan", {
+        topic: TOPIC_RFID_SCAN,
+        data: rfidData,
+        receivedAt: rfidData.receivedAt,
+      });
+    }
+  } catch (error) {
+    console.error("Lỗi khi xử lý RFID quét:", error.message);
   }
 }
 
 /**
  * Nhận phản hồi trạng thái cổng từ ESP32.
  */
-async function handleGateStatus(message, io) {
+async function handleGateStatus(message) {
   console.log("Gate status từ ESP32:", message);
-  if (latestDataRef && message.lane) {
-    latestDataRef.gates[message.lane] = {
+  if (message.lane) {
+    latestData.gates[message.lane] = {
       status: (message.status || "unknown").toUpperCase(),
       source: message.source || "esp32",
       uid: message.uid || null,
-      receivedAt: new Date().toISOString()
+      receivedAt: new Date().toISOString(),
     };
   }
+}
+
+function handleSystemStatus(message) {
+  const receivedAt = new Date().toISOString();
+  latestData.device = {
+    deviceId: message.deviceId || null,
+    status: String(message.status || "offline").toLowerCase(),
+    ssid: message.ssid || null,
+    ip: message.ip || null,
+    rssi: Number.isFinite(Number(message.rssi)) ? Number(message.rssi) : null,
+    uptimeMs: Number(message.uptimeMs) || 0,
+    receivedAt,
+  };
+
+  const io = getIO();
+  if (io) {
+    io.emit("device-status", latestData.device);
+  }
+  console.log("ESP32 system status:", latestData.device);
 }
 
 /**
  * Khởi tạo MQTT.
  */
-function initializeMQTT(io = null, latestData = null) {
+function initializeMQTT() {
   if (mqttClient) {
     return mqttClient;
   }
-
-  ioInstance = io;
-  latestDataRef = latestData;
 
   console.log(`Đang kết nối MQTT: ${MQTT_URL}`);
 
   mqttClient = mqtt.connect(MQTT_URL, {
     clientId: `parking-backend-group17-${Date.now()}`,
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
     clean: true,
     reconnectPeriod: 5000,
     connectTimeout: 10000,
@@ -284,7 +292,7 @@ function initializeMQTT(io = null, latestData = null) {
           return;
         }
         console.log("Backend đã subscribe các MQTT topics");
-      }
+      },
     );
   });
 
@@ -298,12 +306,13 @@ function initializeMQTT(io = null, latestData = null) {
     }
 
     try {
+      const io = getIO();
       if (topic === TOPIC_RFID_SCAN) {
-        await handleRFIDScan(message, io);
+        await handleRFIDScan(message);
       } else if (topic === TOPIC_GATE_STATUS) {
-        await handleGateStatus(message, io);
+        await handleGateStatus(message);
       } else if (topic === TOPIC_SYSTEM_STATUS) {
-        console.log("ESP32 system status:", message);
+        handleSystemStatus(message);
       }
 
       if (io) {

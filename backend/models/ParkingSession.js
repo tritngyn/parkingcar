@@ -12,7 +12,7 @@ const parkingSessionSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "completed"],
+      enum: ["active", "pending_payment", "completed"],
       default: "active",
       index: true,
     },
@@ -28,24 +28,17 @@ const parkingSessionSchema = new mongoose.Schema(
       default: null,
     },
 
-    entryDeviceId: {
+    device: {
       type: String,
       default: null,
+      trim: true,
     },
 
-    exitDeviceId: {
+    direction: {
       type: String,
-      default: null,
-    },
-
-    entryEventId: {
-      type: String,
-      default: null,
-    },
-
-    exitEventId: {
-      type: String,
-      default: null,
+      enum: ["IN", "OUT"],
+      required: true,
+      default: "IN",
     },
 
     fee: {
@@ -55,6 +48,7 @@ const parkingSessionSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
