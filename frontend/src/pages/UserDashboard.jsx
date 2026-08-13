@@ -82,9 +82,107 @@ function TxRow({ tx }) {
   );
 }
 
+function HistoryTab({ transactions }) {
+  const [filter, setFilter] = useState("all");
+
+  const filteredTxs = transactions.filter(tx => {
+    if (filter === "all") return true;
+    const txDateStr = tx.datetime; 
+    const [datePart] = txDateStr.split(", ");
+    const [dd, mm, yyyy] = datePart.split("/");
+    const txDate = new Date(`${yyyy}-${mm}-${dd}`);
+    const now = new Date();
+    
+    if (filter === "today") {
+      return txDate.toDateString() === now.toDateString();
+    }
+    if (filter === "week") {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      return txDate >= oneWeekAgo;
+    }
+    if (filter === "month") {
+      return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold text-foreground">Lịch sử giao dịch</h1>
+        <select 
+          value={filter} 
+          onChange={(e) => setFilter(e.target.value)}
+          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="all">Tất cả</option>
+          <option value="today">Hôm nay</option>
+          <option value="week">7 ngày qua</option>
+          <option value="month">Tháng này</option>
+        </select>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+        <div className="grid grid-cols-[2.25rem_1fr_auto_auto] items-center gap-4 px-5 py-2.5 bg-slate-50 border-b border-border">
+          <span />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Làn / Thời gian</span>
+          <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Loại</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Phí</span>
+        </div>
+        <div className="divide-y divide-border">
+          {filteredTxs.length > 0 ? filteredTxs.map((tx) => (
+            <TxRow key={tx.id} tx={tx} />
+          )) : (
+            <div className="p-5 text-center text-sm text-muted-foreground">Không có giao dịch nào</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VehicleTab({ user }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <h1 className="text-lg font-bold text-foreground">Phương tiện của bạn</h1>
+      
+      <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+        <div className="flex items-start gap-5">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+            <Car className="w-8 h-8" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-bold text-foreground tracking-tight">{user.plate || "Chưa cập nhật"}</h2>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider border border-emerald-200">
+                Đã xác thực
+              </span>
+              <span className="text-xs text-muted-foreground font-mono bg-slate-50 px-2 py-0.5 rounded-md border border-border">
+                UID: {user.cardUid || "---"}
+              </span>
+            </div>
+            
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-slate-50 border border-border">
+                <p className="text-xs text-muted-foreground mb-1">Chủ sở hữu</p>
+                <p className="text-sm font-semibold text-foreground">{user.name}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-border">
+                <p className="text-xs text-muted-foreground mb-1">Số điện thoại</p>
+                <p className="text-sm font-semibold text-foreground">{user.phone}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const { logout } = useAuth();
-  const [activeNav, setActiveNav] = useState("Dashboard");
+  const [activeNav, setActiveNav] = useState("Tổng quan");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,7 +190,6 @@ export default function UserDashboard() {
     { label: "Tổng quan", icon: Home },
     { label: "Phương tiện", icon: Car },
     { label: "Lịch sử",    icon: History },
-    { label: "Cài đặt",   icon: Settings },
   ];
 
   useEffect(() => {
@@ -223,19 +320,11 @@ export default function UserDashboard() {
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            className="relative w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-slate-200 transition-all duration-150"
-          >
-            <Bell className="w-4 h-4" />
-            {USER.notifications > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-card" />
-            )}
-          </button>
         </header>
 
         <main className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-5">
+          {activeNav === "Tổng quan" && (
+            <>
           <div>
             <h1 className="text-lg font-bold text-foreground">Bảng điều khiển</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -293,6 +382,7 @@ export default function UserDashboard() {
               </div>
               <button
                 type="button"
+                onClick={() => setActiveNav("Lịch sử")}
                 className="flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2 transition-colors"
               >
                 Xem tất cả
@@ -328,6 +418,10 @@ export default function UserDashboard() {
             </div>
           </div>
           <div className="h-2" />
+          </>
+          )}
+          {activeNav === "Phương tiện" && <VehicleTab user={USER} />}
+          {activeNav === "Lịch sử" && <HistoryTab transactions={TRANSACTIONS} />}
         </main>
       </div>
     </div>
