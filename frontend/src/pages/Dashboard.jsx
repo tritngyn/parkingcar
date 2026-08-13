@@ -21,7 +21,7 @@ import RevenueChart from "../components/Dashboard/RevenueChart";
 import CardManagement from "./CardManagement";
 
 export default function Dashboard() {
-  const [activeNav, setActiveNav] = useState("Overview");
+  const [activeNav, setActiveNav] = useState("Tổng quan");
 
   // Realtime hook
   const {
@@ -159,7 +159,7 @@ export default function Dashboard() {
 
         {/* Dynamic Page Rendering */}
         <main className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
-          {activeNav === "Overview" && (
+          {activeNav === "Tổng quan" && (
             <>
               {/* Page Title */}
               <div className="mb-6">
@@ -347,121 +347,7 @@ export default function Dashboard() {
             </>
           )}
 
-          {activeNav === "Card Management" && <CardManagement />}
-
-          {activeNav === "System Settings" && (
-            <div className="max-w-xl mx-auto w-full bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-5">
-              <div>
-                <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Radio className="w-5 h-5 text-primary" />
-                  Cấu hình WiFi Thiết bị (ID 5)
-                </h1>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Cấu hình mạng WiFi cho bộ điều khiển cổng ra vào.
-                </p>
-              </div>
-
-              {wifiSuccess && (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-3.5 py-2.5 rounded-lg">
-                  🎉 Cấu hình WiFi đã gửi! Thiết bị sẽ tự khởi động lại.
-                </div>
-              )}
-
-              <form
-                onSubmit={handleWifiConnect}
-                className="flex flex-col gap-4"
-              >
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Mạng WiFi khả dụng
-                  </label>
-                  <div className="flex flex-col gap-2 border border-border rounded-lg p-2.5 bg-input-background">
-                    {[
-                      {
-                        ssidName: "HCMUS_Campus",
-                        strength: "92%",
-                        protected: true,
-                      },
-                      {
-                        ssidName: "Staff_Network",
-                        strength: "78%",
-                        protected: true,
-                      },
-                      {
-                        ssidName: "Guest_WiFi",
-                        strength: "65%",
-                        protected: false,
-                      },
-                    ].map((network) => {
-                      const selected = ssid === network.ssidName;
-                      return (
-                        <div
-                          key={network.ssidName}
-                          onClick={() => setSsid(network.ssidName)}
-                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer text-xs font-medium transition-all ${
-                            selected
-                              ? "bg-primary/10 text-primary border border-primary/20"
-                              : "hover:bg-secondary text-muted-foreground border border-transparent"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Wifi className="w-3.5 h-3.5" />
-                            {network.ssidName}
-                          </span>
-                          <span className="flex items-center gap-3 text-[10px]">
-                            {network.protected && (
-                              <Lock className="w-3 h-3 text-muted-foreground" />
-                            )}
-                            {network.strength}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="wifi-pass"
-                    className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5"
-                  >
-                    Mật khẩu WiFi
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="wifi-pass"
-                      type={showWifiPassword ? "text" : "password"}
-                      placeholder="Nhập mật khẩu"
-                      value={wifiPassword}
-                      onChange={(e) => setWifiPassword(e.target.value)}
-                      className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-input-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowWifiPassword((v) => !v)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-                    >
-                      {showWifiPassword ? (
-                        <EyeOff className="w-4.5 h-4.5" />
-                      ) : (
-                        <Eye className="w-4.5 h-4.5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={wifiConnecting}
-                  className="w-full h-10 mt-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] transition-all disabled:opacity-50"
-                >
-                  {wifiConnecting
-                    ? "Đang lưu cấu hình..."
-                    : "Lưu & Kết nối mạng"}
-                </button>
-              </form>
-            </div>
-          )}
+          {activeNav === "Quản lý thẻ" && <CardManagement />}
         </main>
       </div>
     </div>

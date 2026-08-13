@@ -4,7 +4,6 @@ import { useAuth } from "../../hooks/useAuth";
 const NAV_LINKS = [
   { label: "Tổng quan", icon: LayoutDashboard },
   { label: "Quản lý thẻ", icon: CreditCard },
-  { label: "Cài đặt hệ thống", icon: Settings },
 ];
 
 export default function Sidebar({ activeNav, setActiveNav }) {
