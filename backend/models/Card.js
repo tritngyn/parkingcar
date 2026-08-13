@@ -24,6 +24,11 @@ const cardSchema = new mongoose.Schema({
     ref: 'User',
     default: null,
     index: true
+  },
+  plate: {
+    type: String,
+    default: null,
+    trim: true
   }
 }, { timestamps: true, versionKey: false });
 

@@ -1,36 +1,43 @@
 const Admin = require("../models/Admin");
+const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const db = require("../config/dbStore");
 
 exports.signup = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) {
+    const { fullName, phone, password, plate } = req.body;
+    if (!fullName || !phone || !password) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu username hoặc password",
+        message: "Thiếu thông tin bắt buộc (fullName, phone, password)",
       });
     }
 
     if (!db.isDBConnected()) {
       return res.status(400).json({
         success: false,
-        message: "Không thể đăng ký admin ở chế độ In-Memory",
+        message: "Không thể đăng ký người dùng ở chế độ In-Memory",
       });
     }
 
-    let admin = await Admin.findOne({ username });
-    if (admin) {
+    let user = await User.findOne({ phone });
+    if (user) {
       return res.status(400).json({
         success: false,
-        message: "Tên đăng nhập admin đã tồn tại",
+        message: "Số điện thoại này đã được đăng ký",
       });
     }
-    admin = new Admin({ username, password });
-    await admin.save();
+
+    user = new User({ fullName, phone, password });
+    await user.save();
+
+    // Tạm thời chưa gán thẻ (sẽ gán bởi Admin sau), nhưng ta lưu lại thông tin để Admin biết.
+    // Nếu có plate, ta có thể lưu vào DB. Tuy nhiên Schema User chưa có plate, Card có plate.
+    // Tạm thời User signup thành công, chưa có Card.
+    
     res.status(201).json({
       success: true,
-      message: "Đăng ký admin thành công",
+      message: "Đăng ký tài khoản thành công",
     });
   } catch (err) {
     res.status(500).json({
@@ -42,11 +49,11 @@ exports.signup = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password } = req.body; // username có thể là admin username hoặc user phone
     if (!username || !password) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu username hoặc password",
+        message: "Thiếu tên đăng nhập hoặc mật khẩu",
       });
     }
 
@@ -54,14 +61,14 @@ exports.login = async (req, res) => {
     if (!db.isDBConnected()) {
       if (username === "admin" && password === "admin") {
         const token = jwt.sign(
-          { id: "mock-admin-id", username: "admin" },
+          { id: "mock-admin-id", username: "admin", role: "admin" },
           process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
           { expiresIn: "1d" }
         );
         return res.json({
           success: true,
           token,
-          user: { username: "admin" },
+          user: { username: "admin", role: "admin" },
         });
       } else {
         return res.status(401).json({
@@ -71,30 +78,48 @@ exports.login = async (req, res) => {
       }
     }
 
+    // 1. Kiểm tra bảng Admin trước
     const admin = await Admin.findOne({ username });
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: "Tên đăng nhập hoặc mật khẩu không đúng",
-      });
+    if (admin) {
+      const isMatch = await admin.comparePassword(password);
+      if (isMatch) {
+        const token = jwt.sign(
+          { id: admin._id, username: admin.username, role: "admin" },
+          process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
+          { expiresIn: "1d" }
+        );
+        return res.json({
+          success: true,
+          token,
+          user: { username: admin.username, role: "admin" },
+        });
+      }
     }
-    const isMatch = await admin.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Tên đăng nhập hoặc mật khẩu không đúng",
-      });
+
+    // 2. Nếu không phải Admin, kiểm tra bảng User (coi username là phone)
+    const user = await User.findOne({ phone: username });
+    if (user) {
+      const isMatch = await user.comparePassword(password);
+      if (isMatch) {
+        const token = jwt.sign(
+          { id: user._id, phone: user.phone, role: "user" },
+          process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
+          { expiresIn: "1d" }
+        );
+        return res.json({
+          success: true,
+          token,
+          user: { fullName: user.fullName, phone: user.phone, role: "user" },
+        });
+      }
     }
-    const token = jwt.sign(
-      { id: admin._id, username: admin.username },
-      process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
-      { expiresIn: "1d" }
-    );
-    res.json({
-      success: true,
-      token,
-      user: { username: admin.username },
+
+    // Không tìm thấy hoặc sai pass
+    return res.status(401).json({
+      success: false,
+      message: "Tên đăng nhập hoặc mật khẩu không đúng",
     });
+    
   } catch (err) {
     res.status(500).json({
       success: false,

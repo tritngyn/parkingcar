@@ -5,7 +5,7 @@ const defaultBaseURL = `http://${window.location.hostname}:5000/api`;
 
 // Tạo instance Axios với cấu hình mặc định
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   timeout: 10000,
 });
 

@@ -67,7 +67,7 @@ function publishJson(topic, data, options = {}) {
         return;
       }
       console.log(`MQTT publish OK [${topic}]: ${payload}`);
-    }
+    },
   );
   return true;
 }
@@ -104,7 +104,9 @@ function sendGateCommand({
  * Xử lý UID do ESP32 gửi lên (ID 1 & ID 3)
  */
 async function handleRFIDScan(message) {
-  const uid = String(message.uid || "").trim().toUpperCase();
+  const uid = String(message.uid || "")
+    .trim()
+    .toUpperCase();
   const eventId = String(message.eventId || "");
   const deviceId = String(message.deviceId || "");
 
@@ -115,16 +117,18 @@ async function handleRFIDScan(message) {
 
   console.log(`Đang xử lý thẻ UID=${uid}`);
 
+  let rfidStatus = "IDLE";
+  let lane = "in";
+  let result = { fee: 0, balance: 0, cardType: "UNKNOWN", hasSufficientBalance: false };
+
   try {
     // Gọi parkingService để xử lý nghiệp vụ DB và giá cả
-    const result = await parkingService.processRFIDScan({
+    result = await parkingService.processRFIDScan({
       uid,
       eventId,
       deviceId,
     });
 
-    let rfidStatus = "IDLE";
-    let lane = "in";
 
     if (result.type === "entry") {
       lane = "in";
@@ -215,6 +219,27 @@ async function handleRFIDScan(message) {
     }
   } catch (error) {
     console.error("Lỗi khi xử lý RFID quét:", error.message);
+    // Vẫn gửi sự kiện lên Web để hiển thị thẻ bị từ chối
+    rfidStatus = "ERROR";
+    const errorRfidData = {
+      uid,
+      lane, // Mặc định hiển thị ở lối vào nếu lỗi (Hoặc có thể để frontend tự handle)
+      status: rfidStatus,
+      fee: 0,
+      cardType: "UNKNOWN",
+      balance: 0,
+      hasSufficientBalance: false,
+      receivedAt: new Date().toISOString(),
+    };
+    latestData.rfid = errorRfidData;
+    const io = getIO();
+    if (io) {
+      io.emit("rfid-scan", {
+        topic: TOPIC_RFID_SCAN,
+        data: errorRfidData,
+        receivedAt: errorRfidData.receivedAt,
+      });
+    }
   }
 }
 
@@ -282,7 +307,7 @@ function initializeMQTT() {
           return;
         }
         console.log("Backend đã subscribe các MQTT topics");
-      }
+      },
     );
   });
 

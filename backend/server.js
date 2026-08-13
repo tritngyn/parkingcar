@@ -38,7 +38,7 @@ async function initializeDatabase() {
     isDBConnected = false;
     console.error("Không thể kết nối MongoDB:", error.message);
     console.warn(
-      "Backend chuyển sang chế độ In-Memory. Dữ liệu sẽ mất khi tắt server."
+      "Backend chuyển sang chế độ In-Memory. Dữ liệu sẽ mất khi tắt server.",
     );
   }
 }
@@ -49,7 +49,7 @@ async function initializeDatabase() {
 app.use(
   cors({
     origin: "http://localhost:5173",
-  })
+  }),
 );
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -118,7 +118,9 @@ async function startServer() {
 
   httpServer.listen(WEB_PORT, () => {
     console.log(`Backend running at http://localhost:${WEB_PORT}`);
-    console.log(`Database mode: ${isDBConnected ? "MongoDB Atlas" : "In-Memory"}`);
+    console.log(
+      `Database mode: ${isDBConnected ? "MongoDB Atlas" : "In-Memory"}`,
+    );
   });
 }
 
