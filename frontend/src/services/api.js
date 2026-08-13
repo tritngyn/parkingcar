@@ -1,5 +1,8 @@
 import axios from "axios";
 
+// Tự động nhận diện IP của thiết bị thay vì hardcode localhost
+const defaultBaseURL = `http://${window.location.hostname}:5000/api`;
+
 // Tạo instance Axios với cấu hình mặc định
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
@@ -17,21 +20,24 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor để xử lý lỗi token hết hạn (401/403)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403)
+    ) {
       // Xóa token lỗi/hết hạn và redirect về login nếu cần
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_user");
       // Có thể kích hoạt redirect thủ công ở đây nếu không sử dụng router state
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
