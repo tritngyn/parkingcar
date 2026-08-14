@@ -11,6 +11,7 @@ router.patch("/me/telegram/preferences", authenticateJWT, userController.updateT
 router.patch("/me/top-up", authenticateJWT, userController.topUpMe);
 router.patch("/me/card", authenticateJWT, userController.assignCardMe);
 router.get("/", authenticateJWT, userController.getAllUsers);
+router.delete("/:id", authenticateJWT, userController.deleteUser);
 router.post("/register", userController.registerUser);
 router.patch("/:id/top-up", userController.topUp);
 

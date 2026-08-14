@@ -8,9 +8,7 @@ import {
   Car,
   TrendingDown,
   CalendarDays,
-  ChevronRight,
   CircleParking,
-  History,
   Home,
   Settings,
   LogOut,
@@ -70,7 +68,7 @@ function TxRow({ tx }) {
             : "bg-emerald-50 text-emerald-600"
         }`}
       >
-        {isExit ? "Exit" : "Entry"}
+        {isExit ? "Ra" : "Vào"}
       </span>
 
       <p
@@ -78,7 +76,7 @@ function TxRow({ tx }) {
           isExit ? "text-rose-500" : "text-emerald-600"
         }`}
       >
-        {isExit ? `- ${fmt(tx.fee)}` : "Free"}
+        {isExit ? `- ${fmt(tx.fee)}` : "Miễn phí"}
       </p>
     </div>
   );
@@ -108,11 +106,12 @@ function HistoryTab({ transactions }) {
     }
     return true;
   });
+  const recentTxs = filteredTxs.slice(0, 6);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 shrink-0">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-foreground">Lịch sử giao dịch</h1>
+        <h1 className="text-lg font-bold text-foreground">Lịch sử ra vào</h1>
         <select 
           value={filter} 
           onChange={(e) => setFilter(e.target.value)}
@@ -133,10 +132,10 @@ function HistoryTab({ transactions }) {
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">Phí</span>
         </div>
         <div className="divide-y divide-border">
-          {filteredTxs.length > 0 ? filteredTxs.map((tx) => (
+          {recentTxs.length > 0 ? recentTxs.map((tx) => (
             <TxRow key={tx.id} tx={tx} />
           )) : (
-            <div className="p-5 text-center text-sm text-muted-foreground">Không có giao dịch nào</div>
+            <div className="p-5 text-center text-sm text-muted-foreground">Chưa có lịch sử ra vào</div>
           )}
         </div>
       </div>
@@ -290,10 +289,14 @@ function TelegramTab({ telegram }) {
 
   const unlink = async () => {
     setBusy(true);
+    setMessage("");
     try {
-      await api.delete("/users/me/telegram/link");
+      const response = await api.delete("/users/me/telegram/link");
       setState({ linked: false, notificationsEnabled: true, linkedAt: null });
       setLink(null);
+      setMessage(response.data.message || "Đã hủy liên kết Telegram");
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Không thể hủy liên kết Telegram");
     } finally {
       setBusy(false);
     }
@@ -306,7 +309,7 @@ function TelegramTab({ telegram }) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 shrink-0">
       <h1 className="text-lg font-bold text-foreground">Thông báo Telegram</h1>
       <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-4">
         <div className="flex items-center gap-3">
@@ -319,7 +322,11 @@ function TelegramTab({ telegram }) {
           </div>
         </div>
 
-        {message && <p className="text-xs text-red-500">{message}</p>}
+        {message && (
+          <p className={`text-xs ${message.includes("Đã hủy") ? "text-emerald-600" : "text-red-500"}`}>
+            {message}
+          </p>
+        )}
 
         {state?.linked ? (
           <div className="flex items-center justify-between border-t border-border pt-4">
@@ -362,7 +369,6 @@ export default function UserDashboard() {
   const NAV = [
     { label: "Tổng quan", icon: Home },
     { label: "Phương tiện", icon: Car },
-    { label: "Lịch sử",    icon: History },
     { label: "Thông báo", icon: Settings },
   ];
 
@@ -527,16 +533,16 @@ export default function UserDashboard() {
             </p>
           </div>
 
-          <div className="bg-primary rounded-2xl px-6 py-6 flex items-center justify-between shadow-lg shadow-sky-200/60 relative overflow-hidden">
+          <div className="bg-primary rounded-2xl min-h-[108px] shrink-0 px-5 sm:px-6 py-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-5 shadow-lg shadow-sky-200/60 relative overflow-hidden">
             <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
             <div className="absolute -bottom-8 -right-2 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-            <div className="relative z-10">
+            <div className="relative z-10 min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Wallet className="w-4 h-4 text-white/70" />
                 <p className="text-sm font-medium text-white/70">Số dư hiện tại</p>
               </div>
-              <p className="text-4xl font-bold text-white tracking-tight mt-1">
+              <p className="text-[clamp(1.75rem,5vw,2.25rem)] leading-tight font-bold text-white tracking-tight mt-1 break-words">
                 {new Intl.NumberFormat("vi-VN").format(USER.balance)}
                 <span className="text-xl font-semibold text-white/70 ml-1">₫</span>
               </p>
@@ -545,7 +551,7 @@ export default function UserDashboard() {
             <button
               type="button"
               onClick={() => { setShowTopUp(true); setTopUpMessage(""); }}
-              className="relative z-10 flex items-center gap-2 h-10 px-5 bg-white text-primary text-sm font-semibold rounded-xl hover:bg-slate-50 active:scale-[0.97] transition-all duration-150 shadow-md shrink-0"
+              className="relative z-10 flex items-center justify-center gap-2 h-10 px-5 bg-white text-primary text-sm font-semibold rounded-xl hover:bg-slate-50 active:scale-[0.97] transition-all duration-150 shadow-md shrink-0 self-stretch sm:self-auto"
             >
               <Plus className="w-4 h-4" />
               Nạp tiền
@@ -587,7 +593,7 @@ export default function UserDashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
             {STATS.map(({ label, sub, value, icon: Icon, color, bg }) => (
               <div
                 key={label}
@@ -605,49 +611,7 @@ export default function UserDashboard() {
             ))}
           </div>
 
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="flex items-center gap-2.5">
-                <History className="w-4 h-4 text-muted-foreground" />
-                <h2 className="text-sm font-bold text-foreground">Hoạt động gần đây</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveNav("Lịch sử")}
-                className="flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-2 transition-colors"
-              >
-                Xem tất cả
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-[2.25rem_1fr_auto_auto] items-center gap-4 px-5 py-2.5 bg-slate-50 border-b border-border">
-              <span />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Làn / Thời gian
-              </span>
-              <span className="hidden sm:block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Loại
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-28">
-                Phí
-              </span>
-            </div>
-
-            <div className="divide-y divide-border">
-              {TRANSACTIONS.length > 0 ? TRANSACTIONS.map((tx) => (
-                <TxRow key={tx.id} tx={tx} />
-              )) : (
-                <div className="p-5 text-center text-sm text-muted-foreground">Không có giao dịch nào</div>
-              )}
-            </div>
-
-            <div className="px-5 py-3 bg-slate-50 border-t border-border text-center">
-              <p className="text-[11px] text-muted-foreground">
-                Đang hiển thị {TRANSACTIONS.length} giao dịch gần nhất
-              </p>
-            </div>
-          </div>
+          <HistoryTab transactions={TRANSACTIONS} />
           <div className="h-2" />
           </>
           )}
@@ -660,7 +624,6 @@ export default function UserDashboard() {
               }))}
             />
           )}
-          {activeNav === "Lịch sử" && <HistoryTab transactions={TRANSACTIONS} />}
           {activeNav === "Thông báo" && <TelegramTab telegram={USER.telegram} />}
         </main>
       </div>

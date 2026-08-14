@@ -1,8 +1,11 @@
 const Card = require("../models/Card");
 const User = require("../models/User");
-const { formatDateTime } = require("../models/ParkingSession");
+const ParkingSession = require("../models/ParkingSession");
+const { formatDateTime } = ParkingSession;
 const TelegramLink = require("../models/TelegramLink");
+const mongoose = require("mongoose");
 const { createLinkCode, getBotUsername } = require("../service/telegramBotService");
+const { sendTelegramMessage } = require("../service/telegramService");
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -59,6 +62,51 @@ exports.topUp = async (req, res) => {
     res.json({ success: true, data: { balance: user.balance } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ success: false, message: "Chỉ admin được phép xóa người dùng" });
+  }
+
+  const mongoSession = await mongoose.startSession();
+  try {
+    let deletionResult;
+    await mongoSession.withTransaction(async () => {
+      const user = await User.findById(req.params.id).session(mongoSession);
+      if (!user) {
+        const error = new Error("Không tìm thấy người dùng");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const [sessions, cards] = await Promise.all([
+        ParkingSession.deleteMany({ user: user._id }, { session: mongoSession }),
+        Card.updateMany(
+          { owner: user._id },
+          { $set: { status: "AVAILABLE", owner: null, plate: null } },
+          { session: mongoSession, runValidators: true },
+        ),
+        TelegramLink.deleteMany({ user: user._id }, { session: mongoSession }),
+      ]);
+      await User.deleteOne({ _id: user._id }, { session: mongoSession });
+
+      deletionResult = {
+        deletedSessions: sessions.deletedCount,
+        releasedCards: cards.modifiedCount,
+      };
+    });
+
+    res.json({
+      success: true,
+      message: "Đã xóa người dùng, lịch sử ra vào và giải phóng thẻ",
+      data: deletionResult,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  } finally {
+    await mongoSession.endSession();
   }
 };
 
@@ -151,11 +199,37 @@ exports.createTelegramLink = async (req, res) => {
 
 exports.unlinkTelegram = async (req, res) => {
   try {
+    const user = await User.findById(req.user.id).select("fullName telegram.chatId");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
+    }
+    const chatId = user.telegram?.chatId;
+
     await Promise.all([
       User.findByIdAndUpdate(req.user.id, { $set: { "telegram.chatId": null, "telegram.linkedAt": null } }),
       TelegramLink.deleteOne({ user: req.user.id }),
     ]);
-    res.json({ success: true });
+
+    let notificationSent = false;
+    if (chatId) {
+      try {
+        await sendTelegramMessage(
+          chatId,
+          `🔕 <b>ĐÃ HỦY LIÊN KẾT</b>\n\n` +
+          `Tài khoản Telegram đã được hủy liên kết khỏi người dùng <b>${String(user.fullName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</b>.\n` +
+          `Bạn sẽ không còn nhận thông báo ra/vào từ tài khoản này.`,
+        );
+        notificationSent = true;
+      } catch (notificationError) {
+        console.warn("Không thể gửi thông báo hủy liên kết Telegram:", notificationError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Đã hủy liên kết Telegram",
+      data: { notificationSent },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -189,8 +263,7 @@ exports.getMe = async (req, res) => {
     let thisMonthSpent = 0;
 
     if (card) {
-      const ParkingSession = require("../models/ParkingSession");
-      const sessions = await ParkingSession.find({ uid: card.uid }).sort({ entryTime: -1 }).limit(50);
+      const sessions = await ParkingSession.find({ user: userId }).sort({ entryTime: -1 }).limit(50);
       
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
