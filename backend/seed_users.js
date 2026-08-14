@@ -30,7 +30,6 @@ async function seedData() {
     if (!card) {
       card = new Card({
         uid: targetUid,
-        type: "GUEST",
         status: "ASSIGNED",
         owner: user._id,
         plate: "51G-123.45"

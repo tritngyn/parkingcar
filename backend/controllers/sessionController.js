@@ -1,12 +1,14 @@
-const db = require("../config/dbStore");
+const ParkingSession = require("../models/ParkingSession");
+const { formatDateTime } = require("../models/ParkingSession");
 const { sendGateCommand } = require("../service/mqttService");
 const { getIO, latestData } = require("../service/socketService");
 const Card = require("../models/Card");
 const User = require("../models/User");
+const { toVietnamISOString } = require("../utils/dateTime");
 
 exports.getAllSessions = async (req, res) => {
   try {
-    const sessions = await db.sessions.findAll();
+    const sessions = await ParkingSession.find().sort({ entryTime: -1 });
     const mapped = sessions.map((s) => {
       const isPendingPayment = s.status === "pending_payment" || (s.status === "active" && s.fee > 0);
       let status = "IN";
@@ -18,8 +20,10 @@ exports.getAllSessions = async (req, res) => {
       return {
         _id: s._id,
         uid: s.uid,
-        time_in: s.entryTime || s.createdAt,
-        time_out: s.exitTime || null,
+        user: s.user,
+        direction: s.direction || status,
+        time_in: formatDateTime(s.entryTime),
+        time_out: formatDateTime(s.exitTime),
         status: status,
         fee: s.fee || 0,
       };
@@ -32,13 +36,17 @@ exports.getAllSessions = async (req, res) => {
 
 exports.getActiveSessions = async (req, res) => {
   try {
-    const sessions = await db.sessions.findActiveAll();
+    const sessions = await ParkingSession.find({
+      status: { $in: ["active", "pending_payment"] }
+    }).sort({ entryTime: -1 });
     const mapped = sessions.map((s) => {
       const isPendingPayment = s.fee > 0;
       return {
         _id: s._id,
         uid: s.uid,
-        time_in: s.entryTime || s.createdAt,
+        user: s.user,
+        direction: s.direction || "IN",
+        time_in: formatDateTime(s.entryTime),
         status: isPendingPayment ? "PENDING_PAYMENT" : "IN",
         fee: s.fee || 0,
       };
@@ -58,7 +66,7 @@ exports.paySession = async (req, res) => {
         message: "Thiếu mã lượt đỗ xe (sessionId)",
       });
     }
-    const session = await db.sessions.findById(sessionId);
+    const session = await ParkingSession.findById(sessionId);
     if (!session) {
       return res.status(404).json({
         success: false,
@@ -83,7 +91,7 @@ exports.paySession = async (req, res) => {
     const user = await User.findOneAndUpdate(
       { _id: card.owner, balance: { $gte: session.fee } },
       { $inc: { balance: -session.fee } },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
     if (!user) {
       const owner = await User.findById(card.owner).select("balance");
@@ -96,11 +104,16 @@ exports.paySession = async (req, res) => {
     }
 
     session.status = "completed";
-    session.exitTime = new Date();
     session.direction = "OUT";
+    session.exitTime = new Date();
     try {
       await session.save();
+      await User.findByIdAndUpdate(card.owner, { $set: { parkingStatus: "OUT" } });
     } catch (error) {
+      session.status = "pending_payment";
+      session.direction = "IN";
+      session.exitTime = null;
+      await session.save().catch(() => {});
       await User.findByIdAndUpdate(user._id, { $inc: { balance: session.fee } });
       throw error;
     }
@@ -109,9 +122,7 @@ exports.paySession = async (req, res) => {
     const commandSent = sendGateCommand({
       lane: "out",
       action: "open",
-      uid: session.uid,
-      requestId: `pay-${Date.now()}`,
-      source: "backend",
+      source: "web",
     });
 
     if (!commandSent) {
@@ -120,7 +131,7 @@ exports.paySession = async (req, res) => {
       console.log(`Đã gửi lệnh mở cổng RA cho UID ${session.uid}`);
     }
 
-    const receivedAt = new Date().toISOString();
+    const receivedAt = toVietnamISOString();
     latestData.gates.out = {
       status: "OPEN",
       source: "api-pay",
@@ -144,19 +155,12 @@ exports.paySession = async (req, res) => {
       });
     }
 
-    // [ID 4] Gửi thông báo Telegram (sẽ được tích hợp qua telegramService)
-    try {
-      const telegramService = require("../service/telegramService");
-      telegramService.sendNotification({
-        uid: session.uid,
-        event: "exit",
-        cardType: "GUEST",
-        fee: session.fee,
-        time: session.exitTime,
-      });
-    } catch (e) {
-      console.warn("Telegram notification fallback failed:", e.message);
-    }
+    const { notifyUserByUid } = require("../service/userNotificationService");
+    void notifyUserByUid(session.uid, "PAYMENT_SUCCESS", {
+      fee: session.fee,
+      balance: user.balance,
+      time: session.exitTime,
+    });
 
     res.json({
       success: true,
@@ -171,7 +175,19 @@ exports.paySession = async (req, res) => {
 
 exports.getSessionStats = async (req, res) => {
   try {
-    const sessions = await db.sessions.findAll();
+    const sessions = await ParkingSession.find().sort({ entryTime: -1 });
+
+    const vietnamParts = (value) => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(value));
+      return Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+    };
 
     // Khởi tạo các khung giờ từ 06:00 đến 20:00 tương ứng Recharts
     const hours = [];
@@ -180,8 +196,17 @@ exports.getSessionStats = async (req, res) => {
       hours.push(padHour);
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = vietnamParts(new Date());
+    const isTodayAtHour = (value, hour) => {
+      if (!value) return false;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return false;
+      const parts = vietnamParts(date);
+      return parts.year === today.year &&
+        parts.month === today.month &&
+        parts.day === today.day &&
+        Number(parts.hour) === hour;
+    };
 
     const stats = hours.map((h) => {
       const [hStr] = h.split(":");
@@ -189,29 +214,19 @@ exports.getSessionStats = async (req, res) => {
 
       // Lọc xe vào trong giờ này hôm nay
       const entries = sessions.filter((s) => {
-        const eTime = new Date(s.entryTime || s.createdAt);
-        const eDate = new Date(eTime);
-        eDate.setHours(0, 0, 0, 0);
-        return eDate.getTime() === today.getTime() && eTime.getHours() === hourNum;
+        return isTodayAtHour(s.entryTime || s.createdAt, hourNum);
       }).length;
 
       // Lọc xe ra trong giờ này hôm nay
       const exits = sessions.filter((s) => {
-        if (!s.exitTime) return false;
-        const exTime = new Date(s.exitTime);
-        const exDate = new Date(exTime);
-        exDate.setHours(0, 0, 0, 0);
-        return exDate.getTime() === today.getTime() && exTime.getHours() === hourNum;
+        return isTodayAtHour(s.exitTime, hourNum);
       }).length;
 
       // Tính tổng doanh thu thu được trong giờ này hôm nay
       const revenue = sessions
         .filter((s) => {
           if (!s.exitTime || !s.fee) return false;
-          const exTime = new Date(s.exitTime);
-          const exDate = new Date(exTime);
-          exDate.setHours(0, 0, 0, 0);
-          return exDate.getTime() === today.getTime() && exTime.getHours() === hourNum;
+          return isTodayAtHour(s.exitTime, hourNum);
         })
         .reduce((sum, s) => sum + (s.fee || 0), 0);
 

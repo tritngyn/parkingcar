@@ -1,7 +1,10 @@
 const mqtt = require("mqtt");
 const parkingService = require("./parkingService");
-const telegramService = require("./telegramService");
-const { getIO, latestData } = require("./socketService");
+const { notifyUserByUid } = require("./userNotificationService");
+const { getIO, latestData, emitAssignmentCard } = require("./socketService");
+const { toVietnamISOString } = require("../utils/dateTime");
+const { writeDeviceLog, getLatestDeviceLog } = require("./deviceLogService");
+const { recordRFIDScan, notifySystemError, notifyDeviceStatus } = require("./notificationMonitorService");
 
 const MQTT_URL = process.env.MQTT_BROKER;
 
@@ -20,13 +23,23 @@ const TOPIC_GATE_STATUS = "parking/group17/gate/status";
 const TOPIC_SYSTEM_STATUS = "parking/group17/system/status";
 
 let mqttClient = null;
+let lastMqttLogStatus = null;
+let deviceOfflineTimer = null;
+const deviceBootIds = new Map();
+const initializedDeviceIds = new Set();
+
+function logMqttStatus(status) {
+  if (lastMqttLogStatus === status) return;
+  lastMqttLogStatus = status;
+  void writeDeviceLog({ component: "mqtt", status });
+}
 
 /**
  * Cập nhật latestData và gửi qua Socket.io lên Frontend
  */
 function updateLatestGateStatus(lane, status, source, uid, fee) {
   const io = getIO();
-  const receivedAt = new Date().toISOString();
+  const receivedAt = toVietnamISOString();
   latestData.gates[lane] = {
     status: status.toUpperCase(),
     source,
@@ -64,6 +77,7 @@ function publishJson(topic, data, options = {}) {
     (error) => {
       if (error) {
         console.error(`MQTT publish lỗi tại ${topic}:`, error.message);
+        notifySystemError("mqtt-publish", `${topic}: ${error.message}`);
         return;
       }
       console.log(`MQTT publish OK [${topic}]: ${payload}`);
@@ -78,8 +92,6 @@ function publishJson(topic, data, options = {}) {
 function sendGateCommand({
   lane,
   action = "open",
-  uid = "",
-  requestId = "",
   source = "backend",
 }) {
   if (!["in", "out"].includes(lane)) {
@@ -90,13 +102,10 @@ function sendGateCommand({
   }
 
   return publishJson(TOPIC_GATE_COMMAND, {
-    messageType: "command", // Khớp với Arduino check
-    requestId,
+    messageType: "command",
     source,
     action,
     lane,
-    uid,
-    timestamp: new Date().toISOString(),
   });
 }
 
@@ -107,7 +116,6 @@ async function handleRFIDScan(message) {
   const uid = String(message.uid || "")
     .trim()
     .toUpperCase();
-  const eventId = String(message.eventId || "");
   const deviceId = String(message.deviceId || "");
 
   if (!uid) {
@@ -115,18 +123,28 @@ async function handleRFIDScan(message) {
     return;
   }
 
+  recordRFIDScan({ uid, deviceId: deviceId || null });
+
+  if (emitAssignmentCard({ uid, deviceId: deviceId || null, receivedAt: toVietnamISOString() })) {
+    console.log(`RFID ${uid} được dùng để gán thẻ cho user`);
+    return;
+  }
+
   console.log(`Đang xử lý thẻ UID=${uid}`);
+  await writeDeviceLog({
+    component: "rfid",
+    status: "card_received",
+    deviceId: deviceId || null,
+  });
 
   let rfidStatus = "IDLE";
   let lane = "in";
-  let result = { fee: 0, balance: 0, cardType: "UNKNOWN", hasSufficientBalance: false };
+  let result = { fee: 0, balance: 0, hasSufficientBalance: false };
 
   try {
     // Gọi parkingService để xử lý nghiệp vụ DB và giá cả
     result = await parkingService.processRFIDScan({
       uid,
-      eventId,
-      deviceId,
     });
 
 
@@ -138,61 +156,46 @@ async function handleRFIDScan(message) {
       sendGateCommand({
         lane: "in",
         action: "open",
-        uid,
-        requestId: eventId,
-        source: "backend",
+        source: "rfid",
       });
 
       // 2. Cập nhật Socket state
-      updateLatestGateStatus("in", "OPEN", "mqtt", uid, 0);
+      updateLatestGateStatus("in", "OPEN", "rfid", uid, 0);
 
       // 3. Gửi thông báo Telegram (ID 4)
-      telegramService.sendNotification({
-        uid,
-        event: "entry",
-        cardType: result.cardType,
-        time: result.session.entryTime,
-      });
-    } else if (result.type === "exit_vip") {
+      void notifyUserByUid(uid, "ENTRY", { time: result.session.entryTime });
+    } else if (result.type === "exit") {
       lane = "out";
       rfidStatus = "OPEN";
 
-      // 1. Mở cổng ra cho VIP
+      // 1. Đã trừ tiền thành công, mở cổng ra
       sendGateCommand({
         lane: "out",
         action: "open",
-        uid,
-        requestId: eventId,
-        source: "backend",
+        source: "rfid",
       });
 
       // 2. Cập nhật Socket state
-      updateLatestGateStatus("out", "OPEN", "mqtt", uid, 0);
+      updateLatestGateStatus("out", "OPEN", "rfid", uid, 0);
 
       // 3. Gửi thông báo Telegram (ID 4)
-      telegramService.sendNotification({
-        uid,
-        event: "exit",
-        cardType: "VIP",
-        fee: 0,
+      void notifyUserByUid(uid, "EXIT", {
+        fee: result.fee,
+        balance: result.balance,
         time: result.session.exitTime,
       });
-    } else if (result.type === "exit_guest") {
+    } else if (result.type === "exit_insufficient_balance") {
       lane = "out";
       rfidStatus = "PENDING_PAYMENT";
 
       // 1. Cập nhật Socket state (Yêu cầu thanh toán, không mở cổng ngay)
-      updateLatestGateStatus("out", "PENDING_PAYMENT", "mqtt", uid, result.fee);
+      updateLatestGateStatus("out", "PENDING_PAYMENT", "rfid", uid, result.fee);
 
-      // 2. Gửi thông báo Telegram yêu cầu thanh toán (ID 4)
-      telegramService.sendNotification({
-        uid,
-        event: "exit",
-        cardType: "GUEST",
+      void notifyUserByUid(uid, "LOW_BALANCE", {
         fee: result.fee,
         balance: result.balance,
-        time: new Date(), // Thời điểm quét ra
       });
+
     }
 
     // Gửi Socket.io thông báo sự kiện quét thẻ lên giao diện
@@ -201,10 +204,9 @@ async function handleRFIDScan(message) {
       lane,
       status: rfidStatus,
       fee: result.fee,
-      cardType: result.cardType,
       balance: result.balance,
       hasSufficientBalance: result.hasSufficientBalance,
-      receivedAt: new Date().toISOString(),
+      receivedAt: toVietnamISOString(),
     };
 
     latestData.rfid = rfidData;
@@ -226,10 +228,9 @@ async function handleRFIDScan(message) {
       lane, // Mặc định hiển thị ở lối vào nếu lỗi (Hoặc có thể để frontend tự handle)
       status: rfidStatus,
       fee: 0,
-      cardType: "UNKNOWN",
       balance: 0,
       hasSufficientBalance: false,
-      receivedAt: new Date().toISOString(),
+      receivedAt: toVietnamISOString(),
     };
     latestData.rfid = errorRfidData;
     const io = getIO();
@@ -249,24 +250,52 @@ async function handleRFIDScan(message) {
 async function handleGateStatus(message) {
   console.log("Gate status từ ESP32:", message);
   if (message.lane) {
+    const previousGate = latestData.gates[message.lane] || {};
+    const receivedAt = toVietnamISOString();
     latestData.gates[message.lane] = {
       status: (message.status || "unknown").toUpperCase(),
       source: message.source || "esp32",
-      uid: message.uid || null,
-      receivedAt: new Date().toISOString(),
+      uid: previousGate.uid || null,
+      fee: previousGate.fee || 0,
+      receivedAt,
     };
+
+    const io = getIO();
+    if (io) {
+      io.emit("gate-status", {
+        topic: TOPIC_GATE_STATUS,
+        data: {
+          lane: message.lane,
+          status: message.status,
+          source: message.source || "esp32",
+        },
+        receivedAt,
+      });
+    }
   }
 }
 
-function handleSystemStatus(message) {
-  const receivedAt = new Date().toISOString();
+async function handleSystemStatus(message) {
+  const inMemoryPreviousStatus = latestData.device.status || null;
+  const nextDeviceStatus = String(message.status || "offline").toLowerCase();
+  const receivedAt = toVietnamISOString();
+  const incomingBootId = String(message.bootId || "") || null;
+  const isFirstDeviceMessage = Boolean(message.deviceId) && !initializedDeviceIds.has(message.deviceId);
+  const latestPersistedLog = isFirstDeviceMessage ? await getLatestDeviceLog(message.deviceId) : null;
+  const previousStatus = isFirstDeviceMessage
+    ? (latestPersistedLog?.status || inMemoryPreviousStatus)
+    : inMemoryPreviousStatus;
+  if (message.deviceId) initializedDeviceIds.add(message.deviceId);
+  let knownBootId = deviceBootIds.get(message.deviceId) || latestPersistedLog?.bootId || null;
+  const bootChanged = nextDeviceStatus === "online" && incomingBootId && knownBootId !== incomingBootId;
+  const persistedStatusChanged = isFirstDeviceMessage && latestPersistedLog?.status !== nextDeviceStatus;
+  if (incomingBootId && message.deviceId) {
+    knownBootId = incomingBootId;
+    deviceBootIds.set(message.deviceId, incomingBootId);
+  }
   latestData.device = {
     deviceId: message.deviceId || null,
-    status: String(message.status || "offline").toLowerCase(),
-    ssid: message.ssid || null,
-    ip: message.ip || null,
-    rssi: Number.isFinite(Number(message.rssi)) ? Number(message.rssi) : null,
-    uptimeMs: Number(message.uptimeMs) || 0,
+    status: nextDeviceStatus,
     receivedAt,
   };
 
@@ -275,6 +304,62 @@ function handleSystemStatus(message) {
     io.emit("device-status", latestData.device);
   }
   console.log("ESP32 system status:", latestData.device);
+  if (previousStatus !== latestData.device.status || persistedStatusChanged || bootChanged) {
+    await writeDeviceLog({
+      component: "device",
+      status: latestData.device.status,
+      deviceId: latestData.device.deviceId,
+      bootId: knownBootId,
+      details: { resetReason: message.resetReason, ip: message.ip, uptimeMs: message.uptimeMs },
+    });
+    if (bootChanged) {
+      void notifyDeviceStatus("DEVICE_RESTARTED", {
+        deviceId: latestData.device.deviceId,
+        resetReason: message.resetReason,
+        ip: message.ip,
+      });
+    }
+    if (previousStatus === "online" && latestData.device.status === "offline") {
+      void notifyDeviceStatus("DEVICE_OFFLINE", {
+        deviceId: latestData.device.deviceId,
+        reason: "MQTT Last Will báo thiết bị mất kết nối",
+      });
+    }
+    if (previousStatus === "offline" && latestData.device.status === "online") {
+      void notifyDeviceStatus("DEVICE_ONLINE", {
+        deviceId: latestData.device.deviceId,
+        ip: message.ip,
+      });
+    }
+  }
+
+  if (nextDeviceStatus === "online") {
+    if (deviceOfflineTimer) clearTimeout(deviceOfflineTimer);
+    deviceOfflineTimer = setTimeout(async () => {
+      if (latestData.device.status !== "online") return;
+      latestData.device = {
+        ...latestData.device,
+        status: "offline",
+        receivedAt: toVietnamISOString(),
+      };
+      await writeDeviceLog({
+        component: "device",
+        status: "offline",
+        deviceId: latestData.device.deviceId,
+        bootId: knownBootId,
+        details: { reason: "heartbeat_timeout" },
+      });
+      void notifyDeviceStatus("DEVICE_OFFLINE", {
+        deviceId: latestData.device.deviceId,
+        reason: "Không nhận heartbeat trong 90 giây; có thể mất WiFi hoặc mất nguồn",
+      });
+      const offlineIO = getIO();
+      if (offlineIO) offlineIO.emit("device-status", latestData.device);
+    }, 90000);
+  } else if (deviceOfflineTimer) {
+    clearTimeout(deviceOfflineTimer);
+    deviceOfflineTimer = null;
+  }
 }
 
 /**
@@ -298,12 +383,14 @@ function initializeMQTT() {
 
   mqttClient.on("connect", () => {
     console.log("Backend đã kết nối MQTT");
+    logMqttStatus("connected");
     mqttClient.subscribe(
       [TOPIC_RFID_SCAN, TOPIC_GATE_STATUS, TOPIC_SYSTEM_STATUS],
       { qos: 1 },
       (error) => {
         if (error) {
           console.error("Không thể subscribe MQTT:", error.message);
+          logMqttStatus("error");
           return;
         }
         console.log("Backend đã subscribe các MQTT topics");
@@ -327,7 +414,7 @@ function initializeMQTT() {
       } else if (topic === TOPIC_GATE_STATUS) {
         await handleGateStatus(message);
       } else if (topic === TOPIC_SYSTEM_STATUS) {
-        handleSystemStatus(message);
+        await handleSystemStatus(message);
       }
 
       if (io) {
@@ -343,14 +430,19 @@ function initializeMQTT() {
 
   mqttClient.on("reconnect", () => {
     console.log("Backend đang kết nối lại MQTT...");
+    logMqttStatus("reconnecting");
   });
 
   mqttClient.on("offline", () => {
     console.warn("Backend MQTT offline");
+    logMqttStatus("disconnected");
+    notifySystemError("mqtt", "Backend đã mất kết nối tới MQTT broker");
   });
 
   mqttClient.on("error", (error) => {
     console.error("Backend MQTT error:", error.message);
+    logMqttStatus("error");
+    notifySystemError("mqtt", error.message);
   });
 
   return mqttClient;

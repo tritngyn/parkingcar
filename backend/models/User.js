@@ -27,15 +27,31 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    parkingStatus: {
+      type: String,
+      enum: ["IN", "OUT"],
+      default: "OUT",
+      index: true,
+    },
     password: {
       type: String,
       required: true,
-    }
+    },
+    telegram: {
+      chatId: { type: String, default: null },
+      linkedAt: { type: Date, default: null },
+      notificationsEnabled: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   }
+);
+
+userSchema.index(
+  { "telegram.chatId": 1 },
+  { unique: true, partialFilterExpression: { "telegram.chatId": { $type: "string" } } },
 );
 
 userSchema.pre('save', async function() {

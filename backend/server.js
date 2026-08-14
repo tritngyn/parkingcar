@@ -8,8 +8,10 @@ const mongoose = require("mongoose");
 
 const { initializeMQTT } = require("./service/mqttService");
 const connectDatabase = require("./config/database");
-const { initSocket, latestData } = require("./service/socketService");
+const { initSocket, latestData, startAssignmentScan, stopAssignmentScan } = require("./service/socketService");
 const apiRoutes = require("./routes");
+const { startTelegramBot } = require("./service/telegramBotService");
+const { startNotificationMonitor, notifySystemError } = require("./service/notificationMonitorService");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -28,18 +30,14 @@ initSocket(io);
 // ================================
 // CƠ SỞ DỮ LIỆU (MONGODB)
 // ================================
-let isDBConnected = false;
 async function initializeDatabase() {
   try {
     await connectDatabase();
-    isDBConnected = true;
     console.log("Đã kết nối MongoDB Atlas thành công");
   } catch (error) {
-    isDBConnected = false;
-    console.error("Không thể kết nối MongoDB:", error.message);
-    console.warn(
-      "Backend chuyển sang chế độ In-Memory. Dữ liệu sẽ mất khi tắt server.",
-    );
+    console.error("Lỗi nghiêm trọng: Không thể kết nối MongoDB:", error.message);
+    await notifySystemError("mongodb", error.message);
+    process.exit(1);
   }
 }
 
@@ -75,7 +73,7 @@ app.get("/api/health", (req, res) => {
     success: true,
     message: "Backend is running",
     database: {
-      mode: isDBConnected ? "mongodb" : "in-memory",
+      mode: "mongodb",
       state:
         mongoStates[mongoose.connection.readyState] ??
         `unknown-${mongoose.connection.readyState}`,
@@ -102,7 +100,19 @@ io.on("connection", (socket) => {
   // Gửi dữ liệu trạng thái mới nhất ngay khi web vừa kết nối
   socket.emit("initial-data", latestData);
 
+  socket.on("assignment-scan:start", (acknowledge) => {
+    startAssignmentScan(socket.id);
+    console.log(`Đã bật chế độ gán thẻ cho Socket ${socket.id}`);
+    socket.emit("assignment-scan:ready", { expiresInMs: 60000 });
+    if (typeof acknowledge === "function") {
+      acknowledge({ success: true, expiresInMs: 60000 });
+    }
+  });
+
+  socket.on("assignment-scan:stop", () => stopAssignmentScan(socket.id));
+
   socket.on("disconnect", () => {
+    stopAssignmentScan(socket.id);
     console.log("Web đã ngắt kết nối:", socket.id);
   });
 });
@@ -115,12 +125,12 @@ const WEB_PORT = process.env.PORT || 3000;
 async function startServer() {
   await initializeDatabase();
   initializeMQTT();
+  startTelegramBot();
+  startNotificationMonitor();
 
   httpServer.listen(WEB_PORT, () => {
     console.log(`Backend running at http://localhost:${WEB_PORT}`);
-    console.log(
-      `Database mode: ${isDBConnected ? "MongoDB Atlas" : "In-Memory"}`,
-    );
+    console.log(`Database: Connected to MongoDB Atlas`);
   });
 }
 

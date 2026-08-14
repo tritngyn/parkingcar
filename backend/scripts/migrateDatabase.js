@@ -13,7 +13,7 @@ async function migrateDatabase() {
     { status: { $exists: false } },
     { $set: { status: "AVAILABLE", owner: null } }
   );
-  await database.collection("cards").updateMany({}, { $unset: { __v: "" } });
+  await database.collection("cards").updateMany({}, { $unset: { type: "", __v: "" } });
 
   await database.collection("parkingsessions").updateMany(
     {},
@@ -23,7 +23,7 @@ async function migrateDatabase() {
           device: { $ifNull: ["$exitDeviceId", "$entryDeviceId"] },
           direction: {
             $cond: [
-              { $or: [{ $ne: ["$exitTime", null] }, { $gt: ["$fee", 0] }] },
+              { $or: [{ $ne: ["$exitTime", null] }, { $eq: ["$status", "completed"] }] },
               "OUT",
               "IN",
             ],
@@ -40,6 +40,32 @@ async function migrateDatabase() {
         ],
       },
     ]
+  );
+
+  const cards = await database.collection("cards")
+    .find({ owner: { $type: "objectId" } }, { projection: { uid: 1, owner: 1 } })
+    .toArray();
+
+  for (const card of cards) {
+    await database.collection("parkingsessions").updateMany(
+      { uid: card.uid, user: { $exists: false } },
+      { $set: { user: card.owner } },
+    );
+
+    const activeSession = await database.collection("parkingsessions").findOne({
+      uid: card.uid,
+      exitTime: null,
+      status: { $in: ["active", "pending_payment"] },
+    });
+    await database.collection("users").updateOne(
+      { _id: card.owner },
+      { $set: { parkingStatus: activeSession ? "IN" : "OUT" } },
+    );
+  }
+
+  await database.collection("users").updateMany(
+    { parkingStatus: { $exists: false } },
+    { $set: { parkingStatus: "OUT" } },
   );
 
   await database.collection("admins").updateMany({}, { $unset: { __v: "" } });

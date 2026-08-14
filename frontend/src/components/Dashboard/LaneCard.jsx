@@ -6,7 +6,7 @@ const STATUS_STYLES = {
   OPEN: "bg-emerald-50 text-emerald-600 border border-emerald-200",
   OPENING: "bg-amber-50 text-amber-600 border border-amber-200",
   CLOSING: "bg-amber-50 text-amber-600 border border-amber-200",
-  CLOSED: "bg-slate-100 text-slate-600 border border-slate-200",
+  CLOSE: "bg-slate-100 text-slate-600 border border-slate-200",
   DENIED: "bg-red-50 text-red-600 border border-red-200",
   ERROR: "bg-red-50 text-red-600 border border-red-200",
   PENDING_PAYMENT: "bg-amber-50 text-amber-600 border border-amber-200", // Thêm trạng thái chờ thanh toán
@@ -18,7 +18,7 @@ const STATUS_DOT = {
   OPEN: "bg-emerald-500 animate-pulse",
   OPENING: "bg-amber-500 animate-pulse",
   CLOSING: "bg-amber-500 animate-pulse",
-  CLOSED: "bg-slate-500",
+  CLOSE: "bg-slate-500",
   DENIED: "bg-red-500",
   ERROR: "bg-red-500",
   PENDING_PAYMENT: "bg-amber-500 animate-pulse",

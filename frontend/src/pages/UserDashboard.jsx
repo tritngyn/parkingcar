@@ -15,9 +15,11 @@ import {
   Settings,
   LogOut,
   BadgeCheck,
+  ScanLine,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import api from "../services/api";
+import { socket } from "../services/socket";
 
 function fmt(n) {
   return new Intl.NumberFormat("vi-VN").format(Math.abs(n)) + " ₫";
@@ -87,14 +89,14 @@ function HistoryTab({ transactions }) {
 
   const filteredTxs = transactions.filter(tx => {
     if (filter === "all") return true;
-    const txDateStr = tx.datetime; 
-    const [datePart] = txDateStr.split(", ");
-    const [dd, mm, yyyy] = datePart.split("/");
-    const txDate = new Date(`${yyyy}-${mm}-${dd}`);
+    const txDate = new Date(tx.timestamp);
     const now = new Date();
     
     if (filter === "today") {
-      return txDate.toDateString() === now.toDateString();
+      const vietnamDate = (date) => new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+      }).format(date);
+      return vietnamDate(txDate) === vietnamDate(now);
     }
     if (filter === "week") {
       const oneWeekAgo = new Date();
@@ -142,7 +144,92 @@ function HistoryTab({ transactions }) {
   );
 }
 
-function VehicleTab({ user }) {
+function VehicleTab({ user, onCardAssigned }) {
+  const [scanning, setScanning] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [plate, setPlate] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const handleCard = async ({ uid }) => {
+      if (!scanning) return;
+      setScanning(false);
+      setAssigning(true);
+      try {
+        const response = await api.patch("/users/me/card", { cardUid: uid, plate });
+        setMessage("Gán thẻ thành công");
+        onCardAssigned(response.data.data);
+      } catch (error) {
+        setMessage(error.response?.data?.message || "Không thể gán thẻ");
+      } finally {
+        setAssigning(false);
+      }
+    };
+    socket.on("assignment-card", handleCard);
+    return () => {
+      socket.off("assignment-card", handleCard);
+    };
+  }, [scanning, plate, onCardAssigned]);
+
+  // Chỉ hủy phiên chờ khi component thực sự bị đóng. Không gửi stop trong
+  // cleanup của effect phía trên vì effect đó chạy lại mỗi khi scanning đổi.
+  useEffect(() => () => {
+    socket.emit("assignment-scan:stop");
+  }, []);
+
+  useEffect(() => {
+    if (!scanning) return undefined;
+    const timer = setTimeout(() => {
+      setScanning(false);
+      setMessage("Hết thời gian chờ quét thẻ, vui lòng thử lại");
+      socket.emit("assignment-scan:stop");
+    }, 60000);
+    return () => clearTimeout(timer);
+  }, [scanning]);
+
+  const startScan = () => {
+    setMessage("");
+    if (!socket.connected) socket.connect();
+    socket.timeout(5000).emit("assignment-scan:start", (error, response) => {
+      if (error || !response?.success) {
+        setScanning(false);
+        setMessage("Không thể bật chế độ gán thẻ. Kiểm tra kết nối backend.");
+      } else {
+        setScanning(true);
+      }
+    });
+  };
+
+  if (!user.cardUid) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-lg font-bold text-foreground">Gán thẻ RFID</h1>
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-4">
+          <div>
+            <p className="text-sm font-semibold">Tài khoản chưa được gán thẻ</p>
+            <p className="text-xs text-muted-foreground mt-1">Nhập biển số, sau đó quét thẻ mới hoặc thẻ chưa được gán cho người khác.</p>
+          </div>
+          <input
+            value={plate}
+            onChange={(event) => setPlate(event.target.value.toUpperCase())}
+            placeholder="Biển số xe (tùy chọn)"
+            className="h-10 px-3 rounded-lg border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <button
+            type="button"
+            onClick={startScan}
+            disabled={scanning || assigning}
+            className="h-11 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50"
+          >
+            <ScanLine className={`w-4 h-4 ${scanning ? "animate-pulse" : ""}`} />
+            {assigning ? "Đang gán thẻ..." : scanning ? "Đang chờ quét thẻ..." : "Quét và gán thẻ"}
+          </button>
+          {message && <p className={`text-xs ${message.includes("thành công") ? "text-emerald-600" : "text-red-500"}`}>{message}</p>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-bold text-foreground">Phương tiện của bạn</h1>
@@ -180,16 +267,103 @@ function VehicleTab({ user }) {
   );
 }
 
+function TelegramTab({ telegram }) {
+  const [state, setState] = useState(telegram);
+  const [link, setLink] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => setState(telegram), [telegram]);
+
+  const createLink = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await api.post("/users/me/telegram/link");
+      setLink(response.data.data);
+    } catch (error) {
+      setMessage(error.response?.data?.message || "Không thể tạo liên kết Telegram");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unlink = async () => {
+    setBusy(true);
+    try {
+      await api.delete("/users/me/telegram/link");
+      setState({ linked: false, notificationsEnabled: true, linkedAt: null });
+      setLink(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleNotifications = async () => {
+    const enabled = !state.notificationsEnabled;
+    await api.patch("/users/me/telegram/preferences", { enabled });
+    setState((current) => ({ ...current, notificationsEnabled: enabled }));
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <h1 className="text-lg font-bold text-foreground">Thông báo Telegram</h1>
+      <div className="bg-card border border-border rounded-xl p-6 shadow-sm flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-sky-50 flex items-center justify-center">
+            <Bell className="w-5 h-5 text-sky-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">{state?.linked ? "Đã liên kết" : "Chưa liên kết"}</p>
+            <p className="text-xs text-muted-foreground">Nhận thông báo xe vào, xe ra và yêu cầu nạp tiền.</p>
+          </div>
+        </div>
+
+        {message && <p className="text-xs text-red-500">{message}</p>}
+
+        {state?.linked ? (
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={state.notificationsEnabled} onChange={toggleNotifications} />
+              Bật thông báo
+            </label>
+            <button type="button" disabled={busy} onClick={unlink} className="text-xs font-semibold text-red-500 hover:underline">
+              Hủy liên kết
+            </button>
+          </div>
+        ) : link ? (
+          <div className="border-t border-border pt-4 flex flex-col gap-3">
+            <p className="text-sm">Mã liên kết: <code className="font-bold text-primary">{link.code}</code></p>
+            <a href={link.url} target="_blank" rel="noreferrer" className="h-10 rounded-lg bg-sky-500 text-white flex items-center justify-center text-sm font-semibold">
+              Mở Telegram và liên kết
+            </a>
+            <p className="text-xs text-muted-foreground">Nếu Telegram không tự gửi mã, hãy gửi <code>/start {link.code}</code> cho bot. Mã có hiệu lực 10 phút.</p>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={createLink} className="h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+            {busy ? "Đang tạo liên kết..." : "Liên kết Telegram"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const { logout } = useAuth();
   const [activeNav, setActiveNav] = useState("Tổng quan");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showTopUp, setShowTopUp] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpMessage, setTopUpMessage] = useState("");
+  const [topUpLoading, setTopUpLoading] = useState(false);
 
   const NAV = [
     { label: "Tổng quan", icon: Home },
     { label: "Phương tiện", icon: Car },
     { label: "Lịch sử",    icon: History },
+    { label: "Thông báo", icon: Settings },
   ];
 
   useEffect(() => {
@@ -248,6 +422,27 @@ export default function UserDashboard() {
     },
   ];
   const TRANSACTIONS = data.transactions;
+
+  const handleTopUp = async (event) => {
+    event.preventDefault();
+    setTopUpLoading(true);
+    setTopUpMessage("");
+    try {
+      const amount = Number(topUpAmount);
+      const response = await api.patch("/users/me/top-up", { amount });
+      const balance = response.data.data.balance;
+      setData((current) => ({
+        ...current,
+        user: { ...current.user, balance },
+      }));
+      setTopUpMessage(`Nạp thành công ${amount.toLocaleString("vi-VN")}đ`);
+      setTopUpAmount("");
+    } catch (error) {
+      setTopUpMessage(error.response?.data?.message || "Nạp tiền thất bại");
+    } finally {
+      setTopUpLoading(false);
+    }
+  };
 
   return (
     <div
@@ -349,12 +544,48 @@ export default function UserDashboard() {
 
             <button
               type="button"
+              onClick={() => { setShowTopUp(true); setTopUpMessage(""); }}
               className="relative z-10 flex items-center gap-2 h-10 px-5 bg-white text-primary text-sm font-semibold rounded-xl hover:bg-slate-50 active:scale-[0.97] transition-all duration-150 shadow-md shrink-0"
             >
               <Plus className="w-4 h-4" />
               Nạp tiền
             </button>
           </div>
+
+          {showTopUp && (
+            <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center px-4">
+              <form onSubmit={handleTopUp} className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
+                <div>
+                  <h2 className="text-base font-bold">Nạp tiền mô phỏng</h2>
+                  <p className="text-xs text-muted-foreground mt-1">Nhập số tiền muốn cộng vào tài khoản.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5">Số tiền (VNĐ)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000000000"
+                    step="1"
+                    required
+                    autoFocus
+                    value={topUpAmount}
+                    onChange={(event) => setTopUpAmount(event.target.value)}
+                    placeholder="Ví dụ: 100000"
+                    className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                {topUpMessage && <p className="text-xs text-primary">{topUpMessage}</p>}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setShowTopUp(false)} className="flex-1 h-10 rounded-lg bg-secondary text-sm font-semibold">
+                    Đóng
+                  </button>
+                  <button type="submit" disabled={topUpLoading} className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+                    {topUpLoading ? "Đang nạp..." : "Xác nhận nạp"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             {STATS.map(({ label, sub, value, icon: Icon, color, bg }) => (
@@ -420,8 +651,17 @@ export default function UserDashboard() {
           <div className="h-2" />
           </>
           )}
-          {activeNav === "Phương tiện" && <VehicleTab user={USER} />}
+          {activeNav === "Phương tiện" && (
+            <VehicleTab
+              user={USER}
+              onCardAssigned={({ uid, plate }) => setData((current) => ({
+                ...current,
+                user: { ...current.user, cardUid: uid, plate: plate || "Chưa cập nhật" },
+              }))}
+            />
+          )}
           {activeNav === "Lịch sử" && <HistoryTab transactions={TRANSACTIONS} />}
+          {activeNav === "Thông báo" && <TelegramTab telegram={USER.telegram} />}
         </main>
       </div>
     </div>

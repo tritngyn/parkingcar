@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { socket } from "../services/socket";
 
+const formatVietnamTime = (value) => new Date(value).toLocaleTimeString("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  hour12: false,
+});
+
 export function useParkingRealtime() {
   const [isBackendConnected, setIsBackendConnected] = useState(socket.connected);
   const [entryLane, setEntryLane] = useState({
@@ -19,9 +24,6 @@ export function useParkingRealtime() {
   const [device, setDevice] = useState({
     deviceId: null,
     status: "offline",
-    ssid: null,
-    ip: null,
-    rssi: null,
     receivedAt: null,
   });
 
@@ -44,7 +46,7 @@ export function useParkingRealtime() {
             status: (data.gates.in.status || "IDLE").toUpperCase(),
             fee: data.gates.in.fee ? `₱ ${data.gates.in.fee.toFixed(2)}` : "₱ 0.00",
             lastScan: data.gates.in.receivedAt
-              ? new Date(data.gates.in.receivedAt).toLocaleTimeString()
+              ? formatVietnamTime(data.gates.in.receivedAt)
               : "—",
           }));
         }
@@ -55,7 +57,7 @@ export function useParkingRealtime() {
             status: (data.gates.out.status || "IDLE").toUpperCase(),
             fee: data.gates.out.fee ? `₱ ${data.gates.out.fee.toFixed(2)}` : "₱ 0.00",
             lastScan: data.gates.out.receivedAt
-              ? new Date(data.gates.out.receivedAt).toLocaleTimeString()
+              ? formatVietnamTime(data.gates.out.receivedAt)
               : "—",
           }));
         }
@@ -66,7 +68,7 @@ export function useParkingRealtime() {
     function onRfidScan(payload) {
       console.log("rfid-scan event:", payload);
       const { data, receivedAt } = payload;
-      const formattedTime = new Date(receivedAt).toLocaleTimeString();
+      const formattedTime = formatVietnamTime(receivedAt);
       const mappedStatus = (data.status || "IDLE").toUpperCase();
       const formattedFee = data.fee !== undefined ? `₱ ${Number(data.fee).toFixed(2)}` : "₱ 0.00";
 
@@ -91,7 +93,7 @@ export function useParkingRealtime() {
       console.log("gate-status event:", payload);
       const { data, receivedAt } = payload;
       const mappedStatus = (data.status || "IDLE").toUpperCase();
-      const formattedTime = new Date(receivedAt).toLocaleTimeString();
+      const formattedTime = formatVietnamTime(receivedAt);
 
       if (data.lane === "in") {
         setEntryLane(prev => ({

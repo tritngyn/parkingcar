@@ -7,12 +7,6 @@ const cardSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
-  type: {
-    type: String,
-    enum: ['VIP', 'GUEST'],
-    required: true,
-    default: 'GUEST'
-  },
   status: {
     type: String,
     enum: ['AVAILABLE', 'ASSIGNED'],
@@ -22,8 +16,7 @@ const cardSchema = new mongoose.Schema({
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    default: null,
-    index: true
+    default: null
   },
   plate: {
     type: String,
@@ -31,5 +24,10 @@ const cardSchema = new mongoose.Schema({
     trim: true
   }
 }, { timestamps: true, versionKey: false });
+
+cardSchema.index(
+  { owner: 1 },
+  { unique: true, partialFilterExpression: { owner: { $type: "objectId" } } },
+);
 
 module.exports = mongoose.model('Card', cardSchema);

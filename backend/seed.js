@@ -4,7 +4,7 @@ const ParkingSession = require("./models/ParkingSession");
 
 const connectDatabase = require("./config/database");
 
-const VALID_UIDS = ["A288F506", "39B21405", "GUEST123", "VIP789", "XYZ987", "ABC123"];
+const VALID_UIDS = ["A288F506", "39B21405", "CARD123", "CARD789", "XYZ987", "ABC123"];
 
 // Hàm random số nguyên
 const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -62,8 +62,6 @@ async function seedData() {
           entryTime,
           exitTime,
           fee,
-          entryDeviceId: "esp32-01",
-          exitDeviceId: "esp32-01"
         });
       } else {
         // Nếu entryTime nằm ở tương lai so với hiện tại thì bỏ qua
@@ -77,7 +75,6 @@ async function seedData() {
           status: "active",
           entryTime,
           fee: 0,
-          entryDeviceId: "esp32-01",
         });
       }
     }

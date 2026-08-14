@@ -1,5 +1,6 @@
 const { sendGateCommand } = require("../service/mqttService");
 const { getIO, latestData } = require("../service/socketService");
+const { toVietnamISOString } = require("../utils/dateTime");
 
 exports.controlGate = async (req, res) => {
   try {
@@ -11,22 +12,10 @@ exports.controlGate = async (req, res) => {
       });
     }
 
-    const parkingService = require("../service/parkingService");
-    
-    if (action === "open") {
-      try {
-        await parkingService.processManualGateOpen({ lane, uid });
-      } catch (e) {
-        console.error("Lỗi khi ghi nhận mở cổng thủ công vào DB:", e.message);
-      }
-    }
-
     const commandSent = sendGateCommand({
       lane: lane,
       action: action,
-      uid: uid || "EMERGENCY",
-      requestId: `manual-${Date.now()}`,
-      source: "backend",
+      source: "web",
     });
 
     if (!commandSent) {
@@ -39,7 +28,7 @@ exports.controlGate = async (req, res) => {
       );
     }
 
-    const receivedAt = new Date().toISOString();
+    const receivedAt = toVietnamISOString();
     latestData.gates[lane] = {
       status: action.toUpperCase(),
       source: "manual-api",

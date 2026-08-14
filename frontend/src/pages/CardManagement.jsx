@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Shield, User, Search, RefreshCw } from "lucide-react";
+import { Plus, Trash2, User, Search, RefreshCw } from "lucide-react";
 import api from "../services/api";
 
 export default function CardManagement() {
@@ -10,7 +10,6 @@ export default function CardManagement() {
   
   // Form states
   const [newUid, setNewUid] = useState("");
-  const [newType, setNewType] = useState("GUEST");
   
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,10 +35,8 @@ export default function CardManagement() {
     try {
       await api.post("/cards", {
         uid: newUid.trim().toUpperCase(),
-        type: newType,
       });
       setNewUid("");
-      setNewType("GUEST");
       fetchCards();
     } catch (err) {
       setError(err.response?.data?.message || "Không thể tạo thẻ mới");
@@ -74,7 +71,7 @@ export default function CardManagement() {
         <div>
           <h1 className="text-lg font-bold text-foreground">Quản lý thẻ</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Đăng ký và quản lý thẻ RFID (VIP & Guest)
+            Đăng ký và quản lý thẻ RFID của người dùng
           </p>
         </div>
         <button
@@ -119,21 +116,6 @@ export default function CardManagement() {
               />
             </div>
 
-            <div>
-              <label htmlFor="type" className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Loại thẻ (Card Type)
-              </label>
-              <select
-                id="card-type"
-                value={newType}
-                onChange={(e) => setNewType(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-border bg-input-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
-              >
-                <option value="GUEST">Guest (Khách vãng lai)</option>
-                <option value="VIP">VIP (Thành viên)</option>
-              </select>
-            </div>
-
             <button
               type="submit"
               disabled={submitting}
@@ -176,7 +158,7 @@ export default function CardManagement() {
                 <thead>
                   <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold bg-slate-50">
                     <th className="py-3 px-4">UID</th>
-                    <th className="py-3 px-4">Loại</th>
+                    <th className="py-3 px-4">Chủ sở hữu</th>
                     <th className="py-3 px-4">Ngày đăng ký</th>
                     <th className="py-3 px-4 text-right">Thao tác</th>
                   </tr>
@@ -200,17 +182,9 @@ export default function CardManagement() {
                       <tr key={card.uid} className="hover:bg-secondary/40 transition-colors">
                         <td className="py-3 px-4 font-mono font-medium tracking-wide">{card.uid}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            card.type === "VIP"
-                              ? "bg-purple-50 text-purple-600 border border-purple-200"
-                              : "bg-blue-50 text-blue-600 border border-blue-200"
-                          }`}>
-                            {card.type === "VIP" ? (
-                              <Shield className="w-3 h-3 text-purple-500" />
-                            ) : (
-                              <User className="w-3 h-3 text-blue-500" />
-                            )}
-                            {card.type}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200">
+                            <User className="w-3 h-3 text-blue-500" />
+                            {card.owner?.fullName || "Chưa gán"}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-muted-foreground">

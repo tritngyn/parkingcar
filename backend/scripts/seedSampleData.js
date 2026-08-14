@@ -15,7 +15,7 @@ const sample = {
     email: "nguyenvana@example.com",
     balance: 100000,
   },
-  fallbackCard: { uid: "DEMO0001", type: "GUEST" },
+  fallbackCard: { uid: "DEMO0001" },
 };
 
 async function seedSampleData() {
@@ -55,7 +55,7 @@ async function seedSampleData() {
           owner: null,
         },
       },
-      { new: true, upsert: true, runValidators: true }
+      { returnDocument: "after", upsert: true, runValidators: true }
     );
   }
   if (card.owner && String(card.owner) !== String(user._id)) {
@@ -75,7 +75,7 @@ async function seedSampleData() {
       balance: user.balance,
       created: userCreated,
     },
-    card: { id: card._id, uid: card.uid, type: card.type, status: card.status },
+    card: { id: card._id, uid: card.uid, status: card.status },
   }, null, 2));
 }
 

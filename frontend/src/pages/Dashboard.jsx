@@ -35,7 +35,10 @@ export default function Dashboard() {
 
   // State definitions
   const [activeSessions, setActiveSessions] = useState([]);
+  const [allSessions, setAllSessions] = useState([]);
   const [chartData, setChartData] = useState([]);
+  const [paymentError, setPaymentError] = useState("");
+  const [payingSessionId, setPayingSessionId] = useState(null);
   const [stats, setStats] = useState({
     totalVehicles: 0,
     activeSessions: 0,
@@ -59,13 +62,24 @@ export default function Dashboard() {
       ]);
 
       setActiveSessions(activeRes.data);
+      setAllSessions(allRes.data);           // ← Lưu toàn bộ lịch sử
       setChartData(chartRes.data);
 
-      // Tính toán các chỉ số thống kê động dựa trên dữ liệu thật
-      const todayStr = new Date().toDateString();
-      const todaySessions = allRes.data.filter((s) => {
-        return new Date(s.time_in).toDateString() === todayStr;
-      });
+      // Lọc xe hôm nay: so sánh phần ngày MM/DD/YYYY trong chuỗi đã format
+      const todayParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+      }).formatToParts(new Date());
+      const todayValues = Object.fromEntries(
+        todayParts.map(({ type, value }) => [type, value]),
+      );
+      const todayFormatted = `${todayValues.month}/${todayValues.day}/${todayValues.year}`;
+
+      const todaySessions = allRes.data.filter((s) =>
+        s.time_in && s.time_in.startsWith(todayFormatted)
+      );
 
       const totalToday = todaySessions.length;
       const activeCount = activeRes.data.length;
@@ -74,15 +88,20 @@ export default function Dashboard() {
         .filter((s) => s.status === "OUT")
         .reduce((sum, s) => sum + (s.fee || 0), 0);
 
-      const exitedToday = todaySessions.filter(
-        (s) => s.status === "OUT" && s.time_out,
-      );
+      // Tính thời gian đỗ trung bình từ chuỗi đã format "MM/DD/YYYY HH:mm"
+      const parseFormatted = (str) => {
+        if (!str) return null;
+        const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+        if (!match) return null;
+        const [, month, day, year, hour, minute] = match;
+        return Date.UTC(+year, +month - 1, +day, +hour, +minute);
+      };
+      const exitedToday = todaySessions.filter((s) => s.status === "OUT" && s.time_out);
       let avgDurationStr = "0h 0m";
       if (exitedToday.length > 0) {
         const totalMs = exitedToday.reduce((sum, s) => {
-          const duration =
-            new Date(s.time_out).getTime() - new Date(s.time_in).getTime();
-          return sum + duration;
+          const duration = parseFormatted(s.time_out) - parseFormatted(s.time_in);
+          return sum + (duration > 0 ? duration : 0);
         }, 0);
         const avgMs = totalMs / exitedToday.length;
         const avgMins = Math.round(avgMs / (60 * 1000));
@@ -103,11 +122,20 @@ export default function Dashboard() {
   };
 
   const handlePaySession = async (sessionId) => {
+    setPaymentError("");
+    setPayingSessionId(sessionId);
     try {
       await api.post("/sessions/pay", { sessionId });
-      fetchOverviewData();
+      await fetchOverviewData();
     } catch (err) {
       console.error("Lỗi khi thanh toán:", err.message);
+      const data = err.response?.data;
+      const detail = data?.balance !== undefined
+        ? ` (Số dư: ${Number(data.balance).toLocaleString("vi-VN")}đ, cần: ${Number(data.required).toLocaleString("vi-VN")}đ)`
+        : "";
+      setPaymentError(`${data?.message || "Thanh toán thất bại"}${detail}`);
+    } finally {
+      setPayingSessionId(null);
     }
   };
 
@@ -266,6 +294,12 @@ export default function Dashboard() {
                   </button>
                 </div>
 
+                {paymentError && (
+                  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                    {paymentError}
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
@@ -297,9 +331,7 @@ export default function Dashboard() {
                               {session.uid}
                             </td>
                             <td className="py-3 text-muted-foreground">
-                              {new Date(session.time_in).toLocaleString(
-                                "vi-VN",
-                              )}
+                              {session.time_in || "—"}
                             </td>
                             <td className="py-3">
                               <span
@@ -327,15 +359,82 @@ export default function Dashboard() {
                               {session.status === "PENDING_PAYMENT" ? (
                                 <button
                                   onClick={() => handlePaySession(session._id)}
+                                  disabled={payingSessionId === session._id}
                                   className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold rounded active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-amber-500/10"
                                 >
-                                  Thanh toán
+                                  {payingSessionId === session._id ? "Đang xử lý..." : "Thanh toán"}
                                 </button>
                               ) : (
                                 <span className="text-muted-foreground text-[11px]">
                                   —
                                 </span>
                               )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {/* History Sessions Table */}
+              <div className="bg-card border border-border rounded-xl px-6 py-5 flex flex-col shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Lịch sử phiên đỗ xe</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Tất cả {allSessions.length} lượt vào/ra đã ghi nhận
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchOverviewData}
+                    className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Làm mới
+                  </button>
+                </div>
+                <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="sticky top-0 bg-card z-10">
+                      <tr className="border-b border-border text-muted-foreground uppercase tracking-wider font-semibold">
+                        <th className="py-2.5 pb-2">UID Thẻ</th>
+                        <th className="py-2.5 pb-2">Thời gian vào</th>
+                        <th className="py-2.5 pb-2">Thời gian ra</th>
+                        <th className="py-2.5 pb-2">Trạng thái</th>
+                        <th className="py-2.5 pb-2 text-right">Phí</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border text-foreground">
+                      {allSessions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                            Chưa có dữ liệu
+                          </td>
+                        </tr>
+                      ) : (
+                        allSessions.map((s) => (
+                          <tr key={s._id} className="hover:bg-secondary/40 transition-colors">
+                            <td className="py-2.5 font-mono font-medium tracking-wide">{s.uid}</td>
+                            <td className="py-2.5 text-muted-foreground">{s.time_in || "—"}</td>
+                            <td className="py-2.5 text-muted-foreground">{s.time_out || "—"}</td>
+                            <td className="py-2.5">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                s.status === "OUT"
+                                  ? "bg-slate-100 text-slate-600 border border-slate-200"
+                                  : s.status === "PENDING_PAYMENT"
+                                  ? "bg-amber-50 text-amber-600 border border-amber-200"
+                                  : "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  s.status === "OUT" ? "bg-slate-400" :
+                                  s.status === "PENDING_PAYMENT" ? "bg-amber-500 animate-pulse" :
+                                  "bg-emerald-500"
+                                }`} />
+                                {s.status === "OUT" ? "Đã ra" : s.status === "PENDING_PAYMENT" ? "Chờ TT" : "Trong bãi"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 text-right font-semibold font-mono">
+                              {s.fee > 0 ? `₱ ${s.fee}` : "—"}
                             </td>
                           </tr>
                         ))

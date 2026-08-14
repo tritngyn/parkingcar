@@ -122,6 +122,11 @@ function formatDuration(milliseconds = 0) {
 function sendTelegramMessage(chatId, message) {
   return new Promise((resolve, reject) => {
 
+    if (process.env.TELEGRAM_DRY_RUN === "true") {
+      resolve({ ok: true, dryRun: true, chatId: String(chatId || "dry-run"), message });
+      return;
+    }
+
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token) {
@@ -457,6 +462,9 @@ async function sendUserNotification({
  * RFID_SPAM
  * PARKING_TOO_LONG
  * SYSTEM_ERROR
+ * DEVICE_RESTARTED
+ * DEVICE_OFFLINE
+ * DEVICE_ONLINE
  */
 async function sendAdminNotification({
   type,
@@ -569,6 +577,30 @@ async function sendAdminNotification({
       `${formatTime(data.time || new Date())}`;
   }
 
+  else if (type === "DEVICE_RESTARTED") {
+    message = `🔄 <b>ESP32 ĐÃ KHỞI ĐỘNG</b>\n\n` +
+      `• <b>Thiết bị:</b> ${escapeHtml(data.deviceId || "Không xác định")}\n` +
+      `• <b>Nguyên nhân reset:</b> ${escapeHtml(data.resetReason || "Không xác định")}\n` +
+      `• <b>IP:</b> ${escapeHtml(data.ip || "Không xác định")}\n` +
+      `• <b>Thời gian:</b> ${formatTime(data.time || new Date())}`;
+  }
+
+  else if (type === "DEVICE_OFFLINE") {
+    message = `📴 <b>ESP32 OFFLINE</b>\n\n` +
+      `• <b>Thiết bị:</b> ${escapeHtml(data.deviceId || "Không xác định")}\n` +
+      `• <b>Lý do:</b> ${escapeHtml(data.reason || "Mất kết nối")}\n` +
+      `• <b>Thời gian:</b> ${formatTime(data.time || new Date())}\n\n` +
+      `Vui lòng kiểm tra nguồn điện và kết nối WiFi của ESP32.`;
+  }
+
+
+  else if (type === "DEVICE_ONLINE") {
+    message = `🟢 <b>ESP32 ONLINE</b>\n\n` +
+      `• <b>Thiết bị:</b> ${escapeHtml(data.deviceId || "Không xác định")}\n` +
+      (data.ip ? `• <b>IP:</b> ${escapeHtml(data.ip)}\n` : "") +
+      `• <b>Thời gian:</b> ${formatTime(data.time || new Date())}\n\n` +
+      `Thiết bị đã kết nối lại và hoạt động bình thường.`;
+  }
 
   else {
 
@@ -679,7 +711,6 @@ async function notifyParkingTooLong({
  * sendNotification({
  *    uid,
  *    event,
- *    cardType,
  *    fee,
  *    time
  * });
@@ -691,7 +722,6 @@ async function notifyParkingTooLong({
 async function sendNotification({
   uid,
   event,
-  cardType,
   fee = 0,
   time = new Date(),
 }) {
@@ -727,9 +757,6 @@ async function sendNotification({
       `• <b>Mã thẻ:</b> ` +
       `<code>${escapeHtml(uid)}</code>\n` +
 
-      `• <b>Loại thẻ:</b> ` +
-      `${escapeHtml(cardType || "Không xác định")}\n` +
-
       `• <b>Thời gian vào:</b> ` +
       `${formattedTime}\n` +
 
@@ -740,16 +767,8 @@ async function sendNotification({
 
   else if (event === "exit") {
 
-    const feeText =
-      cardType === "VIP"
-        ? "Miễn phí (VIP)"
-        : formatMoney(fee);
-
-
-    const statusText =
-      cardType === "VIP"
-        ? "Cổng ra đã mở"
-        : "Chờ thanh toán";
+    const feeText = formatMoney(fee);
+    const statusText = "Cổng ra đã mở";
 
 
     message =
@@ -758,9 +777,6 @@ async function sendNotification({
 
       `• <b>Mã thẻ:</b> ` +
       `<code>${escapeHtml(uid)}</code>\n` +
-
-      `• <b>Loại thẻ:</b> ` +
-      `${escapeHtml(cardType || "Không xác định")}\n` +
 
       `• <b>Phí đỗ xe:</b> ` +
       `<b>${feeText}</b>\n` +
