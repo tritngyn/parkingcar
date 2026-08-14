@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const https = require("https");
+const mongoose = require("mongoose");
 const TelegramLink = require("../models/TelegramLink");
 const User = require("../models/User");
 const { sendTelegramMessage } = require("./telegramService");
@@ -70,28 +71,49 @@ async function processUpdate(update) {
     return;
   }
 
-  const linkedToAnotherUser = await User.exists({
-    _id: { $ne: link.user },
-    "telegram.chatId": String(chatId),
-  });
-  if (linkedToAnotherUser) {
-    await sendTelegramMessage(chatId, "❌ <b>LIÊN KẾT THẤT BẠI</b>\n\nTài khoản Telegram này đã liên kết với một User khác.");
-    return;
+  const mongoSession = await mongoose.startSession();
+  let user;
+  let transferred = false;
+  try {
+    await mongoSession.withTransaction(async () => {
+      const targetUser = await User.findById(link.user).session(mongoSession);
+      if (!targetUser) {
+        const error = new Error("Không tìm thấy tài khoản User cần liên kết.");
+        error.code = "LINK_USER_NOT_FOUND";
+        throw error;
+      }
+
+      const unlinkResult = await User.updateMany(
+        { _id: { $ne: targetUser._id }, "telegram.chatId": String(chatId) },
+        {
+          $set: {
+            "telegram.chatId": null,
+            "telegram.linkedAt": null,
+            "telegram.notificationsEnabled": true,
+          },
+        },
+        { session: mongoSession },
+      );
+      transferred = unlinkResult.modifiedCount > 0;
+
+      targetUser.telegram.chatId = String(chatId);
+      targetUser.telegram.linkedAt = new Date();
+      targetUser.telegram.notificationsEnabled = true;
+      await targetUser.save({ session: mongoSession });
+      await TelegramLink.deleteOne({ _id: link._id }, { session: mongoSession });
+      user = targetUser;
+    });
+  } catch (error) {
+    if (error.code === "LINK_USER_NOT_FOUND") {
+      await TelegramLink.deleteOne({ _id: link._id });
+      await sendTelegramMessage(chatId, `❌ <b>LIÊN KẾT THẤT BẠI</b>\n\n${error.message}`);
+      return;
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
   }
 
-  const user = await User.findByIdAndUpdate(link.user, {
-    $set: {
-      "telegram.chatId": String(chatId),
-      "telegram.linkedAt": new Date(),
-      "telegram.notificationsEnabled": true,
-    },
-  }, { returnDocument: "after" });
-  if (!user) {
-    await sendTelegramMessage(chatId, "❌ <b>LIÊN KẾT THẤT BẠI</b>\n\nKhông tìm thấy tài khoản User cần liên kết.");
-    return;
-  }
-
-  await TelegramLink.deleteOne({ _id: link._id });
   await sendTelegramMessage(
     chatId,
     `✅ <b>LIÊN KẾT THÀNH CÔNG</b>\n\n` +

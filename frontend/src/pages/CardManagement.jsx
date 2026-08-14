@@ -56,6 +56,23 @@ export default function CardManagement() {
     }
   };
 
+  const handleDeleteUser = async (card) => {
+    const owner = card.owner;
+    if (!owner?._id) return;
+    const confirmed = window.confirm(
+      `Xóa người dùng ${owner.fullName}? Toàn bộ lịch sử ra/vào sẽ bị xóa và thẻ ${card.uid} sẽ được trả về kho.`,
+    );
+    if (!confirmed) return;
+
+    setError("");
+    try {
+      await api.delete(`/users/${owner._id}`);
+      fetchCards();
+    } catch (err) {
+      setError(err.response?.data?.message || "Không thể xóa người dùng");
+    }
+  };
+
   useEffect(() => {
     fetchCards();
   }, []);
@@ -192,9 +209,9 @@ export default function CardManagement() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <button
-                            onClick={() => handleDeleteCard(card.uid)}
+                            onClick={() => card.owner ? handleDeleteUser(card) : handleDeleteCard(card.uid)}
                             className="p-1.5 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 rounded-md transition-colors cursor-pointer"
-                            title="Xóa thẻ"
+                            title={card.owner ? "Xóa người dùng và giải phóng thẻ" : "Xóa thẻ"}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
