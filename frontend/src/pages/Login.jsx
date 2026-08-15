@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, ParkingSquare, ShieldCheck, ScanLine, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, ParkingSquare, ShieldCheck } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { socket } from "../services/socket";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -17,8 +16,6 @@ export default function Login() {
   const [isLoginTab, setIsLoginTab] = useState(true);
   const [signupForm, setSignupForm] = useState({ fullName: "", contact: "", password: "", plate: "" });
   const [signupMsg, setSignupMsg] = useState("");
-  const [cardUid, setCardUid] = useState("");
-  const [isScanningCard, setIsScanningCard] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -27,47 +24,6 @@ export default function Login() {
       else if (user.role === 'user') navigate('/user-dashboard');
     }
   }, [user, navigate]);
-
-  useEffect(() => {
-    const handleAssignmentCard = ({ uid }) => {
-      setCardUid(String(uid || "").toUpperCase());
-      setIsScanningCard(false);
-      setLoginError("");
-    };
-    const handleScanReady = () => setIsScanningCard(true);
-
-    socket.on("assignment-card", handleAssignmentCard);
-    socket.on("assignment-scan:ready", handleScanReady);
-    return () => {
-      socket.emit("assignment-scan:stop");
-      socket.off("assignment-card", handleAssignmentCard);
-      socket.off("assignment-scan:ready", handleScanReady);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isScanningCard) return undefined;
-    const timer = setTimeout(() => {
-      setIsScanningCard(false);
-      setLoginError("Hết thời gian chờ quét thẻ. Vui lòng thử lại.");
-      socket.emit("assignment-scan:stop");
-    }, 60000);
-    return () => clearTimeout(timer);
-  }, [isScanningCard]);
-
-  const startCardScan = () => {
-    setCardUid("");
-    setLoginError("");
-    if (!socket.connected) socket.connect();
-    socket.timeout(5000).emit("assignment-scan:start", (error, response) => {
-      if (error || !response?.success) {
-        setIsScanningCard(false);
-        setLoginError("Không thể bật chế độ quét thẻ. Kiểm tra kết nối backend.");
-      } else {
-        setIsScanningCard(true);
-      }
-    });
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -90,7 +46,7 @@ export default function Login() {
       const response = await fetch("http://localhost:5000/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...signupForm, cardUid })
+        body: JSON.stringify(signupForm)
       });
       const data = await response.json();
       if (data.success) {
@@ -98,7 +54,6 @@ export default function Login() {
         setIsLoginTab(true);
         setUsername(signupForm.contact);
         setPassword(signupForm.password);
-        setCardUid("");
       } else {
         setLoginError(data.message);
       }
@@ -133,7 +88,7 @@ export default function Login() {
         {/* Tabs */}
         <div className="flex bg-slate-100 rounded-lg p-1">
           <button
-            onClick={() => { setIsLoginTab(true); setLoginError(""); setIsScanningCard(false); socket.emit("assignment-scan:stop"); }}
+            onClick={() => { setIsLoginTab(true); setLoginError(""); }}
             className={`flex-1 text-sm py-2 rounded-md font-medium transition-colors ${isLoginTab ? "bg-white shadow text-primary" : "text-slate-500 hover:text-slate-700"}`}
           >
             Đăng nhập
@@ -237,31 +192,7 @@ export default function Login() {
                 <input type="text" value={signupForm.plate} onChange={e => setSignupForm({...signupForm, plate: e.target.value})} className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:ring-2 focus:ring-ring focus:outline-none" />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Thẻ RFID (tùy chọn)</label>
-                {cardUid ? (
-                  <div className="h-11 px-3.5 rounded-lg border border-emerald-300 bg-emerald-50 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span className="text-sm font-mono font-semibold text-emerald-700">{cardUid}</span>
-                    <button type="button" onClick={startCardScan} className="ml-auto text-xs font-medium text-primary hover:underline">
-                      Quét lại
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startCardScan}
-                    disabled={isScanningCard}
-                    className="w-full h-11 px-3.5 rounded-lg border border-dashed border-primary/50 bg-primary/5 text-primary flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-70"
-                  >
-                    <ScanLine className={`w-4 h-4 ${isScanningCard ? "animate-pulse" : ""}`} />
-                    {isScanningCard ? "Đang chờ quét thẻ..." : "Quét thẻ để liên kết"}
-                  </button>
-                )}
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  Có thể quét ngay hoặc gán thẻ sau trong mục Phương tiện khi đã đăng nhập.
-                </p>
-              </div>
+
 
               <button
                 type="submit"
