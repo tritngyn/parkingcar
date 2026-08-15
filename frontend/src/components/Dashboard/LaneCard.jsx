@@ -50,9 +50,6 @@ export default function LaneCard({ title, type, state, onManualOpen }) {
             <Icon className={`w-4.5 h-4.5 ${iconColor}`} strokeWidth={2} />
           </div>
           <div>
-            <p className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground leading-none">
-              Real-time
-            </p>
             <h3 className="text-sm font-bold text-foreground mt-0.5">{title}</h3>
           </div>
         </div>
@@ -77,12 +74,7 @@ export default function LaneCard({ title, type, state, onManualOpen }) {
         </DataRow>
         <DataRow label="Parking Fee">
           <span className="font-mono text-sm font-semibold text-foreground">
-            {state.fee ? `₱ ${state.fee}` : <span className="text-muted-foreground">—</span>}
-          </span>
-        </DataRow>
-        <DataRow label="Last Scan">
-          <span className="text-sm text-muted-foreground font-mono">
-            {state.receivedAt ? new Date(state.receivedAt).toLocaleTimeString("vi-VN") : <span className="text-muted-foreground">—</span>}
+            {state.fee ? state.fee : <span className="text-muted-foreground">—</span>}
           </span>
         </DataRow>
       </div>

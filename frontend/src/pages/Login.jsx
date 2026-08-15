@@ -15,7 +15,7 @@ export default function Login() {
   const { login, user } = useAuth();
   
   const [isLoginTab, setIsLoginTab] = useState(true);
-  const [signupForm, setSignupForm] = useState({ fullName: "", phone: "", password: "", plate: "" });
+  const [signupForm, setSignupForm] = useState({ fullName: "", contact: "", password: "", plate: "" });
   const [signupMsg, setSignupMsg] = useState("");
   const [cardUid, setCardUid] = useState("");
   const [isScanningCard, setIsScanningCard] = useState(false);
@@ -96,7 +96,7 @@ export default function Login() {
       if (data.success) {
         setSignupMsg("Đăng ký thành công! Hãy đăng nhập.");
         setIsLoginTab(true);
-        setUsername(signupForm.phone);
+        setUsername(signupForm.contact);
         setPassword(signupForm.password);
         setCardUid("");
       } else {
@@ -162,13 +162,13 @@ export default function Login() {
 
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1.5">
-                  Tài khoản / Số điện thoại
+                  Tài khoản / SĐT / Email
                 </label>
                 <input
                   id="username"
                   type="text"
                   required
-                  placeholder="Nhập tài khoản admin hoặc SĐT user"
+                  placeholder="Nhập tài khoản, SĐT hoặc Email"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-150"
@@ -223,8 +223,8 @@ export default function Login() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Số điện thoại</label>
-                <input required type="text" value={signupForm.phone} onChange={e => setSignupForm({...signupForm, phone: e.target.value})} className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:ring-2 focus:ring-ring focus:outline-none" />
+                <label className="block text-sm font-medium text-foreground mb-1.5">SĐT / Email</label>
+                <input required type="text" value={signupForm.contact} onChange={e => setSignupForm({...signupForm, contact: e.target.value})} placeholder="Nhập SĐT hoặc Email" className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:ring-2 focus:ring-ring focus:outline-none" />
               </div>
 
               <div>

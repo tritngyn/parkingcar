@@ -3,22 +3,38 @@ const User = require("../models/User");
 const Card = require("../models/Card");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
+const { sendRegistrationNotification } = require("../service/emailService");
+
+// Helper to check if string is email
+const isEmail = (contact) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+};
 
 exports.signup = async (req, res) => {
   try {
-    const { fullName, phone, password, plate, cardUid } = req.body;
-    if (!fullName || !phone || !password) {
+    const { fullName, contact, password, plate, cardUid } = req.body;
+    if (!fullName || !contact || !password) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu thông tin bắt buộc (fullName, phone, password)",
+        message: "Thiếu thông tin bắt buộc (fullName, contact, password)",
       });
     }
 
-    let user = await User.findOne({ phone });
+    const isContactEmail = isEmail(contact);
+    const phoneVal = isContactEmail ? undefined : contact;
+    const emailVal = isContactEmail ? contact : undefined;
+
+    let user = await User.findOne({ 
+      $or: [
+        { phone: contact },
+        { email: contact }
+      ]
+    });
+    
     if (user) {
       return res.status(400).json({
         success: false,
-        message: "Số điện thoại này đã được đăng ký",
+        message: isContactEmail ? "Email này đã được đăng ký" : "Số điện thoại này đã được đăng ký",
       });
     }
 
@@ -38,7 +54,11 @@ exports.signup = async (req, res) => {
           throw error;
         }
 
-        user = new User({ fullName, phone, password });
+        const userData = { fullName, password };
+        if (phoneVal) userData.phone = phoneVal;
+        if (emailVal) userData.email = emailVal;
+
+        user = new User(userData);
         await user.save({ session: mongoSession });
 
         const assignedCard = await Card.findOneAndUpdate(
@@ -56,8 +76,16 @@ exports.signup = async (req, res) => {
         await mongoSession.endSession();
       }
     } else {
-      user = new User({ fullName, phone, password });
+      const userData = { fullName, password };
+      if (phoneVal) userData.phone = phoneVal;
+      if (emailVal) userData.email = emailVal;
+      user = new User(userData);
       await user.save();
+    }
+    
+    // Send email notification if user registered with email
+    if (emailVal) {
+      sendRegistrationNotification(emailVal, fullName);
     }
     
     res.status(201).json({
@@ -76,15 +104,13 @@ exports.signup = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { username, password } = req.body; // username có thể là admin username hoặc user phone
+    const { username, password } = req.body; // username có thể là admin username, user phone, user email
     if (!username || !password) {
       return res.status(400).json({
         success: false,
         message: "Thiếu tên đăng nhập hoặc mật khẩu",
       });
     }
-
-
 
     // 1. Kiểm tra bảng Admin trước
     const admin = await Admin.findOne({ username });
@@ -104,20 +130,26 @@ exports.login = async (req, res) => {
       }
     }
 
-    // 2. Nếu không phải Admin, kiểm tra bảng User (coi username là phone)
-    const user = await User.findOne({ phone: username });
+    // 2. Nếu không phải Admin, kiểm tra bảng User (coi username là phone hoặc email)
+    const user = await User.findOne({
+      $or: [
+        { phone: username },
+        { email: username }
+      ]
+    });
+    
     if (user) {
       const isMatch = await user.comparePassword(password);
       if (isMatch) {
         const token = jwt.sign(
-          { id: user._id, phone: user.phone, role: "user" },
+          { id: user._id, phone: user.phone, email: user.email, role: "user" },
           process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
           { expiresIn: "1d" }
         );
         return res.json({
           success: true,
           token,
-          user: { fullName: user.fullName, phone: user.phone, role: "user" },
+          user: { fullName: user.fullName, phone: user.phone, email: user.email, role: "user" },
         });
       }
     }

@@ -19,7 +19,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} />
             <span className="text-muted-foreground capitalize">{p.name}:</span>
             <span className="font-semibold text-foreground">
-              {p.dataKey === "revenue" ? `₱ ${p.value}` : p.value}
+              {p.dataKey === "revenue" ? `${(p.value * 1000).toLocaleString("vi-VN")} VNĐ` : p.value}
             </span>
           </div>
         ))}
@@ -70,7 +70,7 @@ export default function RevenueChart({ data }) {
             stroke="#f59e0b"
             fontSize={10}
             dx={8}
-            tickFormatter={(v) => `₱${v}`}
+            tickFormatter={(v) => `${(v * 1000).toLocaleString("vi-VN")} VNĐ`}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
           <Legend 

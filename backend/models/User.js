@@ -10,16 +10,17 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: true,
+      sparse: true,
       unique: true,
       trim: true,
       index: true,
     },
     email: {
       type: String,
+      sparse: true,
+      unique: true,
       trim: true,
       lowercase: true,
-      default: null,
     },
     balance: {
       type: Number,
@@ -53,6 +54,13 @@ userSchema.index(
   { "telegram.chatId": 1 },
   { unique: true, partialFilterExpression: { "telegram.chatId": { $type: "string" } } },
 );
+
+// Require either phone or email
+userSchema.pre('validate', function() {
+  if (!this.phone && !this.email) {
+    throw new Error('User must have either a phone number or an email address.');
+  }
+});
 
 userSchema.pre('save', async function() {
   if (!this.isModified('password')) return;

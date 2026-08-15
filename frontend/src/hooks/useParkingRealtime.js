@@ -11,13 +11,13 @@ export function useParkingRealtime() {
   const [entryLane, setEntryLane] = useState({
     uid: "",
     status: "IDLE",
-    fee: "₱ 0.00",
+    fee: "0 VNĐ",
     lastScan: "—",
   });
   const [exitLane, setExitLane] = useState({
     uid: "",
     status: "IDLE",
-    fee: "₱ 0.00",
+    fee: "0 VNĐ",
     lastScan: "—",
   });
   const [mqttMessages, setMqttMessages] = useState([]);
@@ -44,7 +44,7 @@ export function useParkingRealtime() {
             ...prev,
             uid: data.gates.in.uid || "",
             status: (data.gates.in.status || "IDLE").toUpperCase(),
-            fee: data.gates.in.fee ? `₱ ${data.gates.in.fee.toFixed(2)}` : "₱ 0.00",
+            fee: data.gates.in.fee ? `${(data.gates.in.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ",
             lastScan: data.gates.in.receivedAt
               ? formatVietnamTime(data.gates.in.receivedAt)
               : "—",
@@ -55,7 +55,7 @@ export function useParkingRealtime() {
             ...prev,
             uid: data.gates.out.uid || "",
             status: (data.gates.out.status || "IDLE").toUpperCase(),
-            fee: data.gates.out.fee ? `₱ ${data.gates.out.fee.toFixed(2)}` : "₱ 0.00",
+            fee: data.gates.out.fee ? `${(data.gates.out.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ",
             lastScan: data.gates.out.receivedAt
               ? formatVietnamTime(data.gates.out.receivedAt)
               : "—",
@@ -70,7 +70,7 @@ export function useParkingRealtime() {
       const { data, receivedAt } = payload;
       const formattedTime = formatVietnamTime(receivedAt);
       const mappedStatus = (data.status || "IDLE").toUpperCase();
-      const formattedFee = data.fee !== undefined ? `₱ ${Number(data.fee).toFixed(2)}` : "₱ 0.00";
+      const formattedFee = data.fee !== undefined ? `${(Number(data.fee) * 1000).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ";
 
       if (data.lane === "in") {
         setEntryLane({

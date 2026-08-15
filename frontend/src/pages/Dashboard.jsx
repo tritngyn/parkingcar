@@ -172,6 +172,49 @@ export default function Dashboard() {
     fetchOverviewData();
   }, [entryLane.lastScan, exitLane.lastScan]);
 
+  // States for filtering history
+  const [historyFilter, setHistoryFilter] = useState("all");
+
+  // Filtering logic for allSessions
+  const filteredSessions = allSessions.filter((s) => {
+    if (historyFilter === "all") return true;
+    
+    if (!s.time_in) return false;
+    const match = s.time_in.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+    if (!match) return false;
+    const [, month, day, year] = match;
+    const sessionDate = new Date(+year, +month - 1, +day);
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    if (historyFilter === "today") {
+      return sessionDate.getTime() === today.getTime();
+    }
+    
+    if (historyFilter === "week") {
+      // get start of week (monday)
+      const dayOfWeek = today.getDay();
+      const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const startOfWeek = new Date(today.setDate(diff));
+      return sessionDate >= startOfWeek;
+    }
+    
+    if (historyFilter === "month") {
+      return sessionDate.getMonth() === now.getMonth() && sessionDate.getFullYear() === now.getFullYear();
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    const parseTime = (str) => {
+      if (!str) return 0;
+      const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+      if (!match) return 0;
+      return new Date(+match[3], +match[1] - 1, +match[2], +match[4], +match[5]).getTime();
+    };
+    return parseTime(b.time_in) - parseTime(a.time_in);
+  });
+
   return (
     <div
       className="flex h-screen w-full bg-background overflow-hidden"
@@ -197,6 +240,11 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground mt-1">
                   Quản lý và giám sát bãi đỗ xe theo thời gian thực
                 </p>
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+                  <p className="font-semibold">Quy định giá đỗ xe:</p>
+                  <p>Giá đỗ xe: 20.000 VNĐ / giờ</p>
+                  <p>Công thức: Tổng phí = (Số giờ đỗ, làm tròn lên) × 20.000 VNĐ</p>
+                </div>
               </div>
 
               {/* Stats Grid */}
@@ -216,10 +264,7 @@ export default function Dashboard() {
                 <StatCard
                   icon={Zap}
                   label="Doanh thu hôm nay"
-                  value={new Intl.NumberFormat("vi-VN", {
-                    style: "currency",
-                    currency: "VND",
-                  }).format(stats.todayRevenue)}
+                  value={`${(stats.todayRevenue * 1000).toLocaleString("vi-VN")} VNĐ`}
                   color="text-amber-500"
                 />
                 <StatCard
@@ -348,12 +393,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td className="py-3 font-semibold font-mono">
-                              {session.fee > 0
-                                ? new Intl.NumberFormat("vi-VN", {
-                                    style: "currency",
-                                    currency: "VND",
-                                  }).format(session.fee)
-                                : "0 ₫"}
+                              {session.fee > 0 ? `${(session.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ"}
                             </td>
                             <td className="py-3 text-right">
                               {session.status === "PENDING_PAYMENT" ? (
@@ -383,15 +423,27 @@ export default function Dashboard() {
                   <div>
                     <h3 className="text-sm font-bold text-foreground">Lịch sử phiên đỗ xe</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Tất cả {allSessions.length} lượt vào/ra đã ghi nhận
+                      Đã ghi nhận {filteredSessions.length} lượt vào/ra
                     </p>
                   </div>
-                  <button
-                    onClick={fetchOverviewData}
-                    className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                  >
-                    Làm mới
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={historyFilter}
+                      onChange={(e) => setHistoryFilter(e.target.value)}
+                      className="px-2 py-1.5 bg-background border border-input rounded-lg text-xs"
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="today">Hôm nay</option>
+                      <option value="week">Tuần này</option>
+                      <option value="month">Tháng này</option>
+                    </select>
+                    <button
+                      onClick={fetchOverviewData}
+                      className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Làm mới
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto max-h-72 overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
@@ -405,14 +457,14 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border text-foreground">
-                      {allSessions.length === 0 ? (
+                      {filteredSessions.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-muted-foreground">
                             Chưa có dữ liệu
                           </td>
                         </tr>
                       ) : (
-                        allSessions.map((s) => (
+                        filteredSessions.map((s) => (
                           <tr key={s._id} className="hover:bg-secondary/40 transition-colors">
                             <td className="py-2.5 font-mono font-medium tracking-wide">{s.uid}</td>
                             <td className="py-2.5 text-muted-foreground">{s.time_in || "—"}</td>
@@ -434,7 +486,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td className="py-2.5 text-right font-semibold font-mono">
-                              {s.fee > 0 ? `₱ ${s.fee}` : "—"}
+                              {s.fee > 0 ? `${(s.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "—"}
                             </td>
                           </tr>
                         ))
