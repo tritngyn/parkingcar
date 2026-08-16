@@ -10,8 +10,8 @@
 // =====================================================
 // MQTT
 // =====================================================
-#define MQTT_SERVER "e2d2970e3b4a4079b87cdd8c3372fa3d.s1.eu.hivemq.cloud"
-#define MQTT_PORT 8883
+#define MQTT_SERVER "192.168.4.79"
+#define MQTT_PORT 1884d
 
 #define TOPIC_RFID_SCAN      "parking/group17/rfid/scan"
 #define TOPIC_GATE_COMMAND   "parking/group17/gate/command"
@@ -44,11 +44,11 @@
 // =====================================================
 // SERVO
 // =====================================================
-#define SERVO_IN_PIN   25
-#define SERVO_OUT_PIN  13
+#define SERVO_IN_PIN   25 //8
+#define SERVO_OUT_PIN  13 //3
 
 #define GATE_CLOSED_ANGLE 0
-#define GATE_OPEN_ANGLE   90
+#define GATE_OPEN_ANGLE   -90
 
 #define GATE_OPEN_TIME 2000
 #define GATE_MOVE_TIME 500
@@ -57,8 +57,8 @@
 // =====================================================
 // BUTTON
 // =====================================================
-#define BUTTON_IN_PIN   14
-#define BUTTON_OUT_PIN  12
+#define BUTTON_IN_PIN   14 //5 
+#define BUTTON_OUT_PIN  12 //4
 
 #define DEBOUNCE_TIME 200
 
@@ -66,11 +66,11 @@
 // =====================================================
 // LED
 // =====================================================
-#define LED_IN_GREEN_PIN   33
-#define LED_IN_RED_PIN     32
+#define LED_IN_GREEN_PIN   33 //9
+#define LED_IN_RED_PIN     32//10
 
-#define LED_OUT_GREEN_PIN  27
-#define LED_OUT_RED_PIN    26
+#define LED_OUT_GREEN_PIN  27 //6
+#define LED_OUT_RED_PIN    26//7
 
 
 // =====================================================
