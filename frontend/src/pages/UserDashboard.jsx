@@ -28,11 +28,10 @@ function NavItem({ icon: Icon, label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${
-        active
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-      }`}
+      className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left ${active
+        ? "bg-primary/10 text-primary"
+        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+        }`}
     >
       <Icon className="w-4 h-4 shrink-0" />
       {label}
@@ -46,9 +45,8 @@ function TxRow({ tx }) {
   return (
     <div className="flex items-center gap-4 py-3.5 px-5 hover:bg-slate-50 transition-colors duration-100">
       <div
-        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-          isExit ? "bg-rose-50" : "bg-emerald-50"
-        }`}
+        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isExit ? "bg-rose-50" : "bg-emerald-50"
+          }`}
       >
         {isExit
           ? <ArrowUpFromLine className="w-4 h-4 text-rose-500" strokeWidth={2} />
@@ -62,19 +60,17 @@ function TxRow({ tx }) {
       </div>
 
       <span
-        className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase ${
-          isExit
-            ? "bg-rose-50 text-rose-500"
-            : "bg-emerald-50 text-emerald-600"
-        }`}
+        className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase ${isExit
+          ? "bg-rose-50 text-rose-500"
+          : "bg-emerald-50 text-emerald-600"
+          }`}
       >
         {isExit ? "Ra" : "Vào"}
       </span>
 
       <p
-        className={`text-sm font-bold tabular-nums w-28 text-right shrink-0 ${
-          isExit ? "text-rose-500" : "text-emerald-600"
-        }`}
+        className={`text-sm font-bold tabular-nums w-28 text-right shrink-0 ${isExit ? "text-rose-500" : "text-emerald-600"
+          }`}
       >
         {isExit ? `- ${fmt(tx.fee)}` : "Miễn phí"}
       </p>
@@ -89,7 +85,7 @@ function HistoryTab({ transactions }) {
     if (filter === "all") return true;
     const txDate = new Date(tx.timestamp);
     const now = new Date();
-    
+
     if (filter === "today") {
       const vietnamDate = (date) => new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Ho_Chi_Minh",
@@ -112,8 +108,8 @@ function HistoryTab({ transactions }) {
     <div className="flex flex-col gap-4 shrink-0">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-foreground">Lịch sử ra vào</h1>
-        <select 
-          value={filter} 
+        <select
+          value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         >
@@ -232,7 +228,7 @@ function VehicleTab({ user, onCardAssigned }) {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-lg font-bold text-foreground">Phương tiện của bạn</h1>
-      
+
       <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
         <div className="flex items-start gap-5">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
@@ -248,7 +244,7 @@ function VehicleTab({ user, onCardAssigned }) {
                 UID: {user.cardUid || "---"}
               </span>
             </div>
-            
+
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-slate-50 border border-border">
                 <p className="text-xs text-muted-foreground mb-1">Chủ sở hữu</p>
@@ -526,94 +522,94 @@ export default function UserDashboard() {
         <main className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-5">
           {activeNav === "Tổng quan" && (
             <>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Bảng điều khiển</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Chào mừng bạn quay lại
-            </p>
-          </div>
-
-          <div className="bg-primary rounded-2xl min-h-[108px] shrink-0 px-5 sm:px-6 py-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-5 shadow-lg shadow-sky-200/60 relative overflow-hidden">
-            <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
-            <div className="absolute -bottom-8 -right-2 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
-
-            <div className="relative z-10 min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Wallet className="w-4 h-4 text-white/70" />
-                <p className="text-sm font-medium text-white/70">Số dư hiện tại</p>
+              <div>
+                <h1 className="text-lg font-bold text-foreground">Bảng điều khiển</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Chào mừng bạn quay lại
+                </p>
               </div>
-              <p className="text-[clamp(1.75rem,5vw,2.25rem)] leading-tight font-bold text-white tracking-tight mt-1 break-words">
-                {new Intl.NumberFormat("vi-VN").format(USER.balance)}
-                <span className="text-xl font-semibold text-white/70 ml-1">₫</span>
-              </p>
-            </div>
 
-            <button
-              type="button"
-              onClick={() => { setShowTopUp(true); setTopUpMessage(""); }}
-              className="relative z-10 flex items-center justify-center gap-2 h-10 px-5 bg-white text-primary text-sm font-semibold rounded-xl hover:bg-slate-50 active:scale-[0.97] transition-all duration-150 shadow-md shrink-0 self-stretch sm:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              Nạp tiền
-            </button>
-          </div>
+              <div className="bg-primary rounded-2xl min-h-[108px] shrink-0 px-5 sm:px-6 py-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-5 shadow-lg shadow-sky-200/60 relative overflow-hidden">
+                <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
+                <div className="absolute -bottom-8 -right-2 w-24 h-24 rounded-full bg-white/5 pointer-events-none" />
 
-          {showTopUp && (
-            <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center px-4">
-              <form onSubmit={handleTopUp} className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
-                <div>
-                  <h2 className="text-base font-bold">Nạp tiền mô phỏng</h2>
-                  <p className="text-xs text-muted-foreground mt-1">Nhập số tiền muốn cộng vào tài khoản.</p>
+                <div className="relative z-10 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Wallet className="w-4 h-4 text-white/70" />
+                    <p className="text-sm font-medium text-white/70">Số dư hiện tại</p>
+                  </div>
+                  <p className="text-[clamp(1.75rem,5vw,2.25rem)] leading-tight font-bold text-white tracking-tight mt-1 break-words">
+                    {new Intl.NumberFormat("vi-VN").format(USER.balance)}
+                    <span className="text-xl font-semibold text-white/70 ml-1">₫</span>
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1.5">Số tiền (VNĐ)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="1000000000"
-                    step="1"
-                    required
-                    autoFocus
-                    value={topUpAmount}
-                    onChange={(event) => setTopUpAmount(event.target.value)}
-                    placeholder="Ví dụ: 100000"
-                    className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                {topUpMessage && <p className="text-xs text-primary">{topUpMessage}</p>}
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setShowTopUp(false)} className="flex-1 h-10 rounded-lg bg-secondary text-sm font-semibold">
-                    Đóng
-                  </button>
-                  <button type="submit" disabled={topUpLoading} className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
-                    {topUpLoading ? "Đang nạp..." : "Xác nhận nạp"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
-            {STATS.map(({ label, sub, value, icon: Icon, color, bg }) => (
-              <div
-                key={label}
-                className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4"
-              >
-                <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-                  <Icon className={`w-5 h-5 ${color}`} />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">{sub}</p>
-                  <p className="text-xl font-bold text-foreground mt-0.5">{value}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowTopUp(true); setTopUpMessage(""); }}
+                  className="relative z-10 flex items-center justify-center gap-2 h-10 px-5 bg-white text-primary text-sm font-semibold rounded-xl hover:bg-slate-50 active:scale-[0.97] transition-all duration-150 shadow-md shrink-0 self-stretch sm:self-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nạp tiền
+                </button>
               </div>
-            ))}
-          </div>
 
-          <HistoryTab transactions={TRANSACTIONS} />
-          <div className="h-2" />
-          </>
+              {showTopUp && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center px-4">
+                  <form onSubmit={handleTopUp} className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
+                    <div>
+                      <h2 className="text-base font-bold">Nạp tiền mô phỏng</h2>
+                      <p className="text-xs text-muted-foreground mt-1">Nhập số tiền muốn cộng vào tài khoản.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5">Số tiền (VNĐ)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000000000"
+                        step="1"
+                        required
+                        autoFocus
+                        value={topUpAmount}
+                        onChange={(event) => setTopUpAmount(event.target.value)}
+                        placeholder="Ví dụ: 100000"
+                        className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                    {topUpMessage && <p className="text-xs text-primary">{topUpMessage}</p>}
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setShowTopUp(false)} className="flex-1 h-10 rounded-lg bg-secondary text-sm font-semibold">
+                        Đóng
+                      </button>
+                      <button type="submit" disabled={topUpLoading} className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+                        {topUpLoading ? "Đang nạp..." : "Xác nhận nạp"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
+                {STATS.map(({ label, sub, value, icon: Icon, color, bg }) => (
+                  <div
+                    key={label}
+                    className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4"
+                  >
+                    <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">{sub}</p>
+                      <p className="text-xl font-bold text-foreground mt-0.5">{value}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <HistoryTab transactions={TRANSACTIONS} />
+              <div className="h-2" />
+            </>
           )}
           {activeNav === "Phương tiện" && (
             <VehicleTab

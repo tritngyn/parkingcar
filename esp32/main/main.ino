@@ -1,22 +1,17 @@
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <ESP32Servo.h>
-#include <esp_system.h>
 
 #include "Config.h"
 #include "WifiStorage.h"
 #include "WifiManager.h"
-#include "Secrets.h"
-#include "MqttCertificates.h"
 
-WiFiClientSecure wifiClient;
+WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 String mqttClientId;
-String bootId;
 
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
@@ -35,8 +30,6 @@ unsigned long lastRFIDTime = 0;
 bool rfidReady = false;
 unsigned long lastRFIDRecoveryTime = 0;
 unsigned long lastRFIDHealthCheck = 0;
-unsigned long lastSystemHeartbeat = 0;
-unsigned long lastWiFiRetry = 0;
 
 String makeEventId() {
   return String(DEVICE_ID) + "-" + String(random(1000, 9999));
@@ -56,9 +49,6 @@ void publishSystemStatus(const char* status) {
   doc["messageType"] = "status";
   doc["status"] = status;
   doc["uptimeMs"] = millis();
-  doc["bootId"] = bootId;
-  doc["resetReason"] = String(esp_reset_reason());
-  doc["ip"] = WiFi.localIP().toString();
   publishJson(TOPIC_SYSTEM_STATUS, doc, true);
 }
 
@@ -192,18 +182,18 @@ void connectMQTT() {
   mqttClientId = "esp32-parking-" + String((uint32_t)ESP.getEfuseMac(), HEX);
 
   // Last Will: broker tự báo offline nếu ESP32 mất kết nối bất ngờ.
-  String willPayload = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"messageType\":\"status\",\"status\":\"offline\"}";
+  const char* willPayload = "{\"deviceId\":\"esp32-parking-01\",\"messageType\":\"status\",\"status\":\"offline\"}";
   bool ok = mqttClient.connect(
     mqttClientId.c_str(),
-    MQTT_USERNAME, MQTT_PASSWORD,
-    TOPIC_SYSTEM_STATUS, 1, true, willPayload.c_str()
+    nullptr, nullptr,
+    TOPIC_SYSTEM_STATUS, 1, true, willPayload
   );
 
   if (ok) {
     mqttClient.subscribe(TOPIC_GATE_COMMAND, 1);
     publishSystemStatus("online");
     Serial.println("MQTT connected");
-  }
+  }--
   else {
     Serial.printf("MQTT failed, state=%d\n", mqttClient.state());
   }
@@ -319,7 +309,6 @@ void handleAutoCloseGate() {
 void setup() {
   Serial.begin(115200);
   randomSeed(esp_random());
-  bootId = String((uint32_t)ESP.getEfuseMac(), HEX) + "-" + String(esp_random(), HEX);
 
   pinMode(LED_IN_GREEN_PIN, OUTPUT);
   pinMode(LED_IN_RED_PIN, OUTPUT);
@@ -352,8 +341,6 @@ void setup() {
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
-  mqttClient.setKeepAlive(30);
-  wifiClient.setCACert(MQTT_ROOT_CA);
   if (WifiManager::isConnected()) {
     connectMQTT();
   }
@@ -374,15 +361,7 @@ void loop() {
 
     if (mqttClient.connected()) {
       mqttClient.loop();
-      if (millis() - lastSystemHeartbeat >= 30000) {
-        lastSystemHeartbeat = millis();
-        publishSystemStatus("online");
-      }
     }
-  } else if (millis() - lastWiFiRetry >= 10000) {
-    lastWiFiRetry = millis();
-    Serial.println("WiFi mat ket noi, dang thu ket noi lai...");
-    WiFi.reconnect();
   }
 
   handleButtons();
