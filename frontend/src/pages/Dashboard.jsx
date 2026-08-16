@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParkingRealtime } from "../hooks/useParkingRealtime";
 import api from "../services/api";
 import {
@@ -36,7 +36,7 @@ export default function Dashboard() {
   // State definitions
   const [activeSessions, setActiveSessions] = useState([]);
   const [allSessions, setAllSessions] = useState([]);
-  const [chartData, setChartData] = useState([]);
+  const [chartFilter, setChartFilter] = useState("today");
   const [paymentError, setPaymentError] = useState("");
   const [payingSessionId, setPayingSessionId] = useState(null);
   const [stats, setStats] = useState({
@@ -55,15 +55,13 @@ export default function Dashboard() {
 
   const fetchOverviewData = async () => {
     try {
-      const [activeRes, allRes, chartRes] = await Promise.all([
+      const [activeRes, allRes] = await Promise.all([
         api.get("/sessions/active"),
         api.get("/sessions"),
-        api.get("/sessions/stats"),
       ]);
 
       setActiveSessions(activeRes.data);
-      setAllSessions(allRes.data);           // ← Lưu toàn bộ lịch sử
-      setChartData(chartRes.data);
+      setAllSessions(allRes.data);
 
       // Lọc xe hôm nay: so sánh phần ngày MM/DD/YYYY trong chuỗi đã format
       const todayParts = new Intl.DateTimeFormat("en-US", {
@@ -215,6 +213,94 @@ export default function Dashboard() {
     return parseTime(b.time_in) - parseTime(a.time_in);
   });
 
+  const computedChartData = useMemo(() => {
+    const parseTime = (str) => {
+      if (!str) return null;
+      const match = str.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+      if (!match) return null;
+      return new Date(+match[3], +match[1] - 1, +match[2], +match[4], +match[5]);
+    };
+
+    const now = new Date();
+    
+    if (chartFilter === "today") {
+      const data = [];
+      for (let h = 6; h <= 20; h++) {
+         data.push({ label: `${String(h).padStart(2, "0")}:00`, entries: 0, exits: 0, revenue: 0 });
+      }
+      
+      allSessions.forEach(s => {
+        const dIn = parseTime(s.time_in);
+        if (dIn && dIn.toDateString() === now.toDateString()) {
+           const hIn = dIn.getHours();
+           if (hIn >= 6 && hIn <= 20) data[hIn - 6].entries++;
+        }
+        
+        const dOut = parseTime(s.time_out);
+        if (dOut && dOut.toDateString() === now.toDateString()) {
+           const hOut = dOut.getHours();
+           if (hOut >= 6 && hOut <= 20) {
+              data[hOut - 6].exits++;
+              data[hOut - 6].revenue += (s.fee || 0);
+           }
+        }
+      });
+      return data;
+    }
+    
+    if (chartFilter === "week") {
+      const dayNames = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+      const data = dayNames.map(name => ({ label: name, entries: 0, exits: 0, revenue: 0 }));
+      
+      const dayOfWeek = now.getDay();
+      const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const startOfWeek = new Date(now.setDate(diff));
+      startOfWeek.setHours(0,0,0,0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 7);
+      
+      allSessions.forEach(s => {
+         const dIn = parseTime(s.time_in);
+         if (dIn && dIn >= startOfWeek && dIn < endOfWeek) {
+            const idx = dIn.getDay() === 0 ? 6 : dIn.getDay() - 1;
+            data[idx].entries++;
+         }
+         const dOut = parseTime(s.time_out);
+         if (dOut && dOut >= startOfWeek && dOut < endOfWeek) {
+            const idx = dOut.getDay() === 0 ? 6 : dOut.getDay() - 1;
+            data[idx].exits++;
+            data[idx].revenue += (s.fee || 0);
+         }
+      });
+      return data;
+    }
+    
+    if (chartFilter === "month") {
+      const maxDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const data = [];
+      for (let i = 1; i <= maxDays; i++) {
+         data.push({ label: `${i}`, entries: 0, exits: 0, revenue: 0 });
+      }
+      
+      allSessions.forEach(s => {
+         const dIn = parseTime(s.time_in);
+         if (dIn && dIn.getMonth() === now.getMonth() && dIn.getFullYear() === now.getFullYear()) {
+            const idx = dIn.getDate() - 1;
+            data[idx].entries++;
+         }
+         const dOut = parseTime(s.time_out);
+         if (dOut && dOut.getMonth() === now.getMonth() && dOut.getFullYear() === now.getFullYear()) {
+            const idx = dOut.getDate() - 1;
+            data[idx].exits++;
+            data[idx].revenue += (s.fee || 0);
+         }
+      });
+      return data;
+    }
+    
+    return [];
+  }, [allSessions, chartFilter]);
+
   return (
     <div
       className="flex h-screen w-full bg-background overflow-hidden"
@@ -313,11 +399,22 @@ export default function Dashboard() {
                       Lưu lượng & Doanh thu
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Thống kê theo giờ từ cơ sở dữ liệu
+                      Thống kê trực tiếp từ dữ liệu lịch sử
                     </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={chartFilter}
+                      onChange={(e) => setChartFilter(e.target.value)}
+                      className="px-2 py-1.5 bg-background border border-input rounded-lg text-xs"
+                    >
+                      <option value="today">Hôm nay (Theo giờ)</option>
+                      <option value="week">Tuần này (Theo thứ)</option>
+                      <option value="month">Tháng này (Theo ngày)</option>
+                    </select>
+                  </div>
                 </div>
-                <RevenueChart data={chartData} />
+                <RevenueChart data={computedChartData} />
               </div>
 
               {/* Active Sessions List */}

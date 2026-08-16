@@ -16,10 +16,15 @@ const CustomTooltip = ({ active, payload, label }) => {
         <p className="font-semibold text-foreground mb-2">{label}</p>
         {payload.map((p) => (
           <div key={p.dataKey} className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} />
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ background: p.fill }}
+            />
             <span className="text-muted-foreground capitalize">{p.name}:</span>
             <span className="font-semibold text-foreground">
-              {p.dataKey === "revenue" ? `${(p.value * 1000).toLocaleString("vi-VN")} VNĐ` : p.value}
+              {p.dataKey === "revenue"
+                ? `${(p.value * 1000).toLocaleString("vi-VN")} VNĐ`
+                : p.value}
             </span>
           </div>
         ))}
@@ -45,9 +50,14 @@ export default function RevenueChart({ data }) {
           data={data}
           margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
         >
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.1} />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            vertical={false}
+            stroke="#334155"
+            opacity={0.1}
+          />
           <XAxis
-            dataKey="hour"
+            dataKey="label"
             tickLine={false}
             axisLine={false}
             stroke="#94a3b8"
@@ -72,19 +82,22 @@ export default function RevenueChart({ data }) {
             dx={8}
             tickFormatter={(v) => `${(v * 1000).toLocaleString("vi-VN")} VNĐ`}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-          <Legend 
-            verticalAlign="top" 
-            height={36} 
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ fill: "rgba(255,255,255,0.05)" }}
+          />
+          <Legend
+            verticalAlign="top"
+            height={36}
             iconType="circle"
             iconSize={8}
-            wrapperStyle={{ fontSize: '11px', fontWeight: 500 }}
+            wrapperStyle={{ fontSize: "11px", fontWeight: 500 }}
           />
           <Bar
-            yAxisId="left"
-            dataKey="entries"
-            name="Xe Vào"
-            fill="#38bdf8"
+            yAxisId="right"
+            dataKey="revenue"
+            name="Doanh thu"
+            fill="#f59e0b"
             radius={[4, 4, 0, 0]}
             maxBarSize={15}
           />
@@ -96,11 +109,12 @@ export default function RevenueChart({ data }) {
             radius={[4, 4, 0, 0]}
             maxBarSize={15}
           />
+
           <Bar
-            yAxisId="right"
-            dataKey="revenue"
-            name="Doanh thu"
-            fill="#f59e0b"
+            yAxisId="left"
+            dataKey="entries"
+            name="Xe Vào"
+            fill="#38bdf8"
             radius={[4, 4, 0, 0]}
             maxBarSize={15}
           />
