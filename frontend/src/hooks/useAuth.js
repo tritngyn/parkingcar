@@ -39,6 +39,9 @@ export function useAuth() {
     } catch (err) {
       const msg = err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.";
       setError(msg);
+      if (err.response?.data?.requireOTP) {
+        throw { message: msg, requireOTP: true };
+      }
       throw new Error(msg);
     }
   };

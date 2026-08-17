@@ -38,6 +38,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otpCode: {
+      type: String,
+      default: null,
+    },
+    otpExpiresAt: {
+      type: Date,
+      default: null,
+    },
     telegram: {
       chatId: { type: String, default: null },
       linkedAt: { type: Date, default: null },

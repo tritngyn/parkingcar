@@ -3,7 +3,7 @@ const User = require("../models/User");
 const Card = require("../models/Card");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const { sendRegistrationNotification } = require("../service/emailService");
+const { sendOTPNotification } = require("../service/emailService");
 
 // Helper to check if string is email
 const isEmail = (contact) => {
@@ -38,6 +38,19 @@ exports.signup = async (req, res) => {
       });
     }
 
+    const userData = { fullName, password };
+    if (phoneVal) {
+      userData.phone = phoneVal;
+      userData.isVerified = true; // SĐT tạm thời pass qua bước OTP
+    }
+    if (emailVal) {
+      userData.email = emailVal;
+      userData.isVerified = false;
+      // Sinh OTP 6 số
+      userData.otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      userData.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // Hết hạn sau 10 phút
+    }
+
     if (cardUid) {
       const uid = String(cardUid).trim().toUpperCase();
       const mongoSession = await mongoose.startSession();
@@ -53,10 +66,6 @@ exports.signup = async (req, res) => {
           error.statusCode = 409;
           throw error;
         }
-
-        const userData = { fullName, password };
-        if (phoneVal) userData.phone = phoneVal;
-        if (emailVal) userData.email = emailVal;
 
         user = new User(userData);
         await user.save({ session: mongoSession });
@@ -76,29 +85,66 @@ exports.signup = async (req, res) => {
         await mongoSession.endSession();
       }
     } else {
-      const userData = { fullName, password };
-      if (phoneVal) userData.phone = phoneVal;
-      if (emailVal) userData.email = emailVal;
       user = new User(userData);
       await user.save();
     }
     
     // Send email notification if user registered with email
-    if (emailVal) {
-      sendRegistrationNotification(emailVal, fullName);
+    if (emailVal && user.otpCode) {
+      sendOTPNotification(emailVal, fullName, user.otpCode);
     }
     
     res.status(201).json({
       success: true,
-      message: cardUid
-        ? "Đăng ký tài khoản và gán thẻ thành công"
-        : "Đăng ký tài khoản thành công, bạn có thể gán thẻ sau khi đăng nhập",
+      message: emailVal 
+        ? "Đăng ký thành công! Vui lòng kiểm tra email để lấy mã OTP xác thực."
+        : (cardUid ? "Đăng ký tài khoản và gán thẻ thành công" : "Đăng ký tài khoản thành công, bạn có thể gán thẻ sau khi đăng nhập"),
     });
   } catch (err) {
     res.status(err.statusCode || (err.code === 11000 ? 409 : 500)).json({
       success: false,
       message: err.message,
     });
+  }
+};
+
+exports.verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: "Thiếu email hoặc mã OTP" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ success: false, message: "Tài khoản đã được xác thực trước đó" });
+    }
+
+    if (user.otpCode !== otp) {
+      return res.status(400).json({ success: false, message: "Mã OTP không chính xác" });
+    }
+
+    if (new Date() > user.otpExpiresAt) {
+      return res.status(400).json({ success: false, message: "Mã OTP đã hết hạn, vui lòng yêu cầu gửi lại" });
+    }
+
+    // Xác thực thành công
+    user.isVerified = true;
+    user.otpCode = null;
+    user.otpExpiresAt = null;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Xác thực tài khoản thành công! Bây giờ bạn có thể đăng nhập.",
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -141,6 +187,15 @@ exports.login = async (req, res) => {
     if (user) {
       const isMatch = await user.comparePassword(password);
       if (isMatch) {
+        // TẦNG 3: Kiểm tra isVerified
+        if (!user.isVerified) {
+          return res.status(403).json({
+            success: false,
+            message: "Tài khoản chưa được xác thực. Vui lòng kiểm tra email để lấy mã OTP.",
+            requireOTP: true // Trả về cờ này để Frontend biết mà bật popup nhập OTP
+          });
+        }
+
         const token = jwt.sign(
           { id: user._id, phone: user.phone, email: user.email, role: "user" },
           process.env.JWT_SECRET || "supersecretjwtkey_change_in_production",
