@@ -17,6 +17,11 @@ export default function Login() {
   const [signupForm, setSignupForm] = useState({ fullName: "", contact: "", password: "", plate: "" });
   const [signupMsg, setSignupMsg] = useState("");
 
+  // OTP States
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [verifyEmail, setVerifyEmail] = useState("");
+
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
@@ -32,7 +37,12 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err) {
-      setLoginError(err.message);
+      setLoginError(err.message || err);
+      // Nếu Backend báo yêu cầu OTP
+      if (err.requireOTP) {
+        setVerifyEmail(username); // Giả định username là email
+        setShowOtpInput(true);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -50,10 +60,42 @@ export default function Login() {
       });
       const data = await response.json();
       if (data.success) {
-        setSignupMsg("Đăng ký thành công! Hãy đăng nhập.");
+        if (data.message.includes("OTP")) {
+          setSignupMsg("Đã gửi mã OTP đến email của bạn!");
+          setVerifyEmail(signupForm.contact);
+          setShowOtpInput(true);
+        } else {
+          setSignupMsg("Đăng ký thành công! Hãy đăng nhập.");
+          setIsLoginTab(true);
+          setUsername(signupForm.contact);
+          setPassword(signupForm.password);
+        }
+      } else {
+        setLoginError(data.message);
+      }
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setLoginError("");
+    setSubmitting(true);
+    try {
+      const response = await fetch("http://localhost:5000/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmail, otp: otpCode })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSignupMsg("Xác thực thành công! Hãy đăng nhập.");
+        setShowOtpInput(false);
         setIsLoginTab(true);
-        setUsername(signupForm.contact);
-        setPassword(signupForm.password);
+        setOtpCode("");
       } else {
         setLoginError(data.message);
       }
@@ -86,22 +128,72 @@ export default function Login() {
         </div>
         
         {/* Tabs */}
-        <div className="flex bg-slate-100 rounded-lg p-1">
-          <button
-            onClick={() => { setIsLoginTab(true); setLoginError(""); }}
-            className={`flex-1 text-sm py-2 rounded-md font-medium transition-colors ${isLoginTab ? "bg-white shadow text-primary" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            Đăng nhập
-          </button>
-          <button
-            onClick={() => { setIsLoginTab(false); setLoginError(""); }}
-            className={`flex-1 text-sm py-2 rounded-md font-medium transition-colors ${!isLoginTab ? "bg-white shadow text-primary" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            Đăng ký (User)
-          </button>
-        </div>
+        {!showOtpInput && (
+          <div className="flex bg-slate-100 rounded-lg p-1">
+            <button
+              onClick={() => { setIsLoginTab(true); setLoginError(""); setSignupMsg(""); }}
+              className={`flex-1 text-sm py-2 rounded-md font-medium transition-colors ${isLoginTab ? "bg-white shadow text-primary" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              Đăng nhập
+            </button>
+            <button
+              onClick={() => { setIsLoginTab(false); setLoginError(""); setSignupMsg(""); }}
+              className={`flex-1 text-sm py-2 rounded-md font-medium transition-colors ${!isLoginTab ? "bg-white shadow text-primary" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              Đăng ký (User)
+            </button>
+          </div>
+        )}
 
-        {isLoginTab ? (
+        {showOtpInput ? (
+          <form onSubmit={handleVerifyOTP} className="flex flex-col gap-5">
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 shadow-xl">
+              <div className="text-center">
+                <h2 className="text-lg font-bold text-foreground">Xác thực Email</h2>
+                <p className="text-sm text-muted-foreground mt-1">Mã 6 số đã được gửi tới <br/><b className="text-primary">{verifyEmail}</b></p>
+              </div>
+
+              {signupMsg && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs px-3.5 py-2.5 rounded-lg">
+                  ✅ {signupMsg}
+                </div>
+              )}
+              {loginError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-3.5 py-2.5 rounded-lg">
+                  ⚠️ {loginError}
+                </div>
+              )}
+
+              <div>
+                <input
+                  required
+                  type="text"
+                  maxLength={6}
+                  placeholder="------"
+                  value={otpCode}
+                  onChange={e => setOtpCode(e.target.value)}
+                  className="w-full h-12 text-center text-2xl tracking-[0.5em] px-3.5 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-150 font-mono"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || otpCode.length !== 6}
+                className="w-full h-11 mt-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50 transition-all duration-150 shadow-sm"
+              >
+                {submitting ? "Đang xác thực..." : "Xác nhận OTP"}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => { setShowOtpInput(false); setLoginError(""); setSignupMsg(""); }}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors text-center mt-1"
+              >
+                Quay lại đăng nhập
+              </button>
+            </div>
+          </form>
+        ) : isLoginTab ? (
           <form onSubmit={handleLogin} className="flex flex-col gap-5">
             <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 shadow-xl">
               {signupMsg && (
@@ -191,8 +283,6 @@ export default function Login() {
                 <label className="block text-sm font-medium text-foreground mb-1.5">Biển số xe (Tùy chọn)</label>
                 <input type="text" value={signupForm.plate} onChange={e => setSignupForm({...signupForm, plate: e.target.value})} className="w-full h-11 px-3.5 rounded-lg border border-border bg-input-background text-sm focus:ring-2 focus:ring-ring focus:outline-none" />
               </div>
-
-
 
               <button
                 type="submit"

@@ -48,7 +48,7 @@
 #define SERVO_OUT_PIN  13 //3
 
 #define GATE_CLOSED_ANGLE 0
-#define GATE_OPEN_ANGLE   90
+#define GATE_OPEN_ANGLE   -90
 
 #define GATE_OPEN_TIME 2000
 #define GATE_MOVE_TIME 500
