@@ -23,7 +23,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             <span className="text-muted-foreground capitalize">{p.name}:</span>
             <span className="font-semibold text-foreground">
               {p.dataKey === "revenue"
-                ? `${(p.value * 1000).toLocaleString("vi-VN")} VNĐ`
+                ? `${Number(p.value).toLocaleString("vi-VN")} VNĐ`
                 : p.value}
             </span>
           </div>
@@ -58,6 +58,7 @@ export default function RevenueChart({ data }) {
           />
           <XAxis
             dataKey="label"
+            interval={data.length > 15 ? 2 : 0}
             tickLine={false}
             axisLine={false}
             stroke="#94a3b8"
@@ -80,7 +81,7 @@ export default function RevenueChart({ data }) {
             stroke="#f59e0b"
             fontSize={10}
             dx={8}
-            tickFormatter={(v) => `${(v * 1000).toLocaleString("vi-VN")} VNĐ`}
+            tickFormatter={(v) => `${Number(v).toLocaleString("vi-VN")} VNĐ`}
           />
           <Tooltip
             content={<CustomTooltip />}

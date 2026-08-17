@@ -42,6 +42,13 @@ async function migrateDatabase() {
     ]
   );
 
+  // Older versions stored fees in thousands of VND (20 meant 20,000 VND).
+  // Normalize those records once; the range makes this migration idempotent.
+  const migratedFees = await database.collection("parkingsessions").updateMany(
+    { fee: { $gt: 0, $lt: 20000 } },
+    [{ $set: { fee: { $multiply: ["$fee", 1000] } } }],
+  );
+
   const cards = await database.collection("cards")
     .find({ owner: { $type: "objectId" } }, { projection: { uid: 1, owner: 1 } })
     .toArray();
@@ -69,7 +76,7 @@ async function migrateDatabase() {
   );
 
   await database.collection("admins").updateMany({}, { $unset: { __v: "" } });
-  console.log("Database migration completed");
+  console.log(`Database migration completed (${migratedFees.modifiedCount} legacy fees normalized)`);
 }
 
 migrateDatabase()

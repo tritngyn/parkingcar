@@ -225,7 +225,7 @@ export default function Dashboard() {
     
     if (chartFilter === "today") {
       const data = [];
-      for (let h = 6; h <= 20; h++) {
+      for (let h = 0; h <= 23; h++) {
          data.push({ label: `${String(h).padStart(2, "0")}:00`, entries: 0, exits: 0, revenue: 0 });
       }
       
@@ -233,16 +233,14 @@ export default function Dashboard() {
         const dIn = parseTime(s.time_in);
         if (dIn && dIn.toDateString() === now.toDateString()) {
            const hIn = dIn.getHours();
-           if (hIn >= 6 && hIn <= 20) data[hIn - 6].entries++;
+           data[hIn].entries++;
         }
         
         const dOut = parseTime(s.time_out);
         if (dOut && dOut.toDateString() === now.toDateString()) {
            const hOut = dOut.getHours();
-           if (hOut >= 6 && hOut <= 20) {
-              data[hOut - 6].exits++;
-              data[hOut - 6].revenue += (s.fee || 0);
-           }
+           data[hOut].exits++;
+           data[hOut].revenue += Number(s.fee) || 0;
         }
       });
       return data;
@@ -350,7 +348,7 @@ export default function Dashboard() {
                 <StatCard
                   icon={Zap}
                   label="Doanh thu hôm nay"
-                  value={`${(stats.todayRevenue * 1000).toLocaleString("vi-VN")} VNĐ`}
+                  value={`${Number(stats.todayRevenue).toLocaleString("vi-VN")} VNĐ`}
                   color="text-amber-500"
                 />
                 <StatCard
@@ -490,7 +488,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td className="py-3 font-semibold font-mono">
-                              {session.fee > 0 ? `${(session.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ"}
+                              {session.fee > 0 ? `${Number(session.fee).toLocaleString("vi-VN")} VNĐ` : "0 VNĐ"}
                             </td>
                             <td className="py-3 text-right">
                               {session.status === "PENDING_PAYMENT" ? (
@@ -583,7 +581,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td className="py-2.5 text-right font-semibold font-mono">
-                              {s.fee > 0 ? `${(s.fee * 1000).toLocaleString("vi-VN")} VNĐ` : "—"}
+                              {s.fee > 0 ? `${Number(s.fee).toLocaleString("vi-VN")} VNĐ` : "—"}
                             </td>
                           </tr>
                         ))

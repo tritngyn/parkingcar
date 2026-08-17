@@ -193,7 +193,7 @@ void connectMQTT() {
     mqttClient.subscribe(TOPIC_GATE_COMMAND, 1);
     publishSystemStatus("online");
     Serial.println("MQTT connected");
-  }--
+  }
   else {
     Serial.printf("MQTT failed, state=%d\n", mqttClient.state());
   }

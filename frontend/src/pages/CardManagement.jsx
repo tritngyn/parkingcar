@@ -1,15 +1,11 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, User, Search, RefreshCw } from "lucide-react";
+import { Trash2, User, Search, RefreshCw } from "lucide-react";
 import api from "../services/api";
 
 export default function CardManagement() {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  
-  // Form states
-  const [newUid, setNewUid] = useState("");
   
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -24,24 +20,6 @@ export default function CardManagement() {
       setError(err.response?.data?.message || "Không thể tải danh sách thẻ");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCreateCard = async (e) => {
-    e.preventDefault();
-    if (!newUid.trim()) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      await api.post("/cards", {
-        uid: newUid.trim().toUpperCase(),
-      });
-      setNewUid("");
-      fetchCards();
-    } catch (err) {
-      setError(err.response?.data?.message || "Không thể tạo thẻ mới");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -88,7 +66,7 @@ export default function CardManagement() {
         <div>
           <h1 className="text-lg font-bold text-foreground">Quản lý thẻ</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Đăng ký và quản lý thẻ RFID của người dùng
+            Quản lý thẻ RFID của người dùng
           </p>
         </div>
         <button
@@ -106,45 +84,7 @@ export default function CardManagement() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Register Card Form */}
-        <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 shadow-sm h-fit">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Plus className="w-4 h-4 text-primary" />
-            Đăng ký thẻ RFID mới
-          </h3>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Nhập mã thẻ RFID chính xác để cho phép truy cập.
-          </p>
-
-          <form onSubmit={handleCreateCard} className="flex flex-col gap-4 mt-2">
-            <div>
-              <label htmlFor="uid" className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Mã thẻ (UID)
-              </label>
-              <input
-                id="uid"
-                type="text"
-                required
-                placeholder="Nhập mã hex (vd: 39B21405)"
-                value={newUid}
-                onChange={(e) => setNewUid(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-border bg-input-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full h-10 mt-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-sky-400 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 shadow-sm"
-            >
-              {submitting ? "Đang xử lý..." : "Lưu thẻ"}
-            </button>
-          </form>
-        </div>
-
-        {/* Card Table View */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl px-6 py-5 flex flex-col shadow-sm">
+      <div className="bg-card border border-border rounded-xl px-6 py-5 flex flex-col shadow-sm">
           {/* Header row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h3 className="text-sm font-bold text-foreground">
@@ -223,7 +163,6 @@ export default function CardManagement() {
               </table>
             )}
           </div>
-        </div>
       </div>
     </div>
   );
