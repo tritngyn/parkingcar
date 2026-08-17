@@ -9,7 +9,7 @@
     "seed:sample": "node scripts/seedSampleData.js",
     "test:mqtt": "node scripts/testMqttCloud.js",
     "test:notifications": "node scripts/testNotifications.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/parkingFee.test.js"
   },
   "keywords": [],
   "author": "",

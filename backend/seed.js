@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const ParkingSession = require("./models/ParkingSession");
 
 const connectDatabase = require("./config/database");
+const { calculateParkingFee } = require("./utils/parkingFee");
 
 const VALID_UIDS = ["A288F506", "39B21405", "CARD123", "CARD789", "XYZ987", "ABC123"];
 
@@ -53,8 +54,7 @@ async function seedData() {
            continue; // Bỏ qua nếu thời gian ra nằm ở tương lai so với hiện tại
         }
 
-        const parkedHours = Math.max(1, Math.ceil(parkDurationMs / (60 * 60 * 1000)));
-        const fee = parkedHours * 20; // 20 peso/giờ
+        const fee = calculateParkingFee(entryTime, exitTime);
 
         fakeSessions.push({
           uid,

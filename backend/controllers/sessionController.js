@@ -5,6 +5,13 @@ const { getIO, latestData } = require("../service/socketService");
 const Card = require("../models/Card");
 const User = require("../models/User");
 const { toVietnamISOString } = require("../utils/dateTime");
+const { calculateParkingFee } = require("../utils/parkingFee");
+
+function getDisplayedFee(session, now = new Date()) {
+  return session.status === "active"
+    ? calculateParkingFee(session.entryTime, now)
+    : (session.fee || 0);
+}
 
 exports.getAllSessions = async (req, res) => {
   try {
@@ -25,7 +32,7 @@ exports.getAllSessions = async (req, res) => {
         time_in: formatDateTime(s.entryTime),
         time_out: formatDateTime(s.exitTime),
         status: status,
-        fee: s.fee || 0,
+        fee: getDisplayedFee(s),
       };
     });
     res.json(mapped);
@@ -48,7 +55,7 @@ exports.getActiveSessions = async (req, res) => {
         direction: s.direction || "IN",
         time_in: formatDateTime(s.entryTime),
         status: isPendingPayment ? "PENDING_PAYMENT" : "IN",
-        fee: s.fee || 0,
+        fee: getDisplayedFee(s),
       };
     });
     res.json(mapped);
@@ -88,18 +95,13 @@ exports.paySession = async (req, res) => {
       });
     }
 
-    const user = await User.findOneAndUpdate(
-      { _id: card.owner, balance: { $gte: session.fee } },
-      { $inc: { balance: -session.fee } },
-      { returnDocument: "after", runValidators: true }
-    );
+    // Admin confirms this payment manually. This flow intentionally bypasses
+    // the card owner's balance check and does not debit their account.
+    const user = await User.findById(card.owner);
     if (!user) {
-      const owner = await User.findById(card.owner).select("balance");
-      return res.status(402).json({
+      return res.status(404).json({
         success: false,
-        message: "Số dư không đủ để thanh toán",
-        required: session.fee,
-        balance: owner?.balance ?? 0,
+        message: "Không tìm thấy người dùng sở hữu thẻ",
       });
     }
 
@@ -114,7 +116,6 @@ exports.paySession = async (req, res) => {
       session.direction = "IN";
       session.exitTime = null;
       await session.save().catch(() => {});
-      await User.findByIdAndUpdate(user._id, { $inc: { balance: session.fee } });
       throw error;
     }
 
@@ -189,9 +190,9 @@ exports.getSessionStats = async (req, res) => {
       return Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
     };
 
-    // Khởi tạo các khung giờ từ 06:00 đến 20:00 tương ứng Recharts
+    // Cover the full day so overnight traffic is not omitted from analytics.
     const hours = [];
-    for (let h = 6; h <= 20; h++) {
+    for (let h = 0; h <= 23; h++) {
       const padHour = String(h).padStart(2, "0") + ":00";
       hours.push(padHour);
     }

@@ -2,19 +2,7 @@ const Card = require("../models/Card");
 const User = require("../models/User");
 const ParkingSession = require("../models/ParkingSession");
 const { formatDateTime } = require("../models/ParkingSession");
-
-/**
- * Tính phí đỗ xe.
- * @param {Date} entryTime - Thời gian vào
- * @param {Date} exitTime  - Thời gian ra
- * @param {number} pricePerHour - Giá mỗi giờ (mặc định 20)
- * @returns {number} Phí đỗ xe
- */
-function calculateFee(entryTime, exitTime, pricePerHour = 20) {
-  const ms = exitTime.getTime() - entryTime.getTime();
-  const hours = Math.max(1, Math.ceil(ms / (60 * 60 * 1000)));
-  return hours * pricePerHour;
-}
+const { calculateParkingFee } = require("../utils/parkingFee");
 
 /**
  * Xử lý nghiệp vụ lõi khi quẹt thẻ RFID (Xe vào / Xe ra)
@@ -73,7 +61,7 @@ async function processRFIDScan({ uid }) {
   // 4. Có phiên active → XE RA
   const exitTime = new Date();
 
-  const fee = calculateFee(activeSession.entryTime, exitTime);
+  const fee = calculateParkingFee(activeSession.entryTime, exitTime);
   const user = await User.findOneAndUpdate(
     { _id: card.owner._id, balance: { $gte: fee } },
     { $inc: { balance: -fee } },
@@ -160,7 +148,7 @@ async function processManualGateOpen({ lane, uid }) {
 
       if (activeSession) {
         const exitTime = new Date();
-        const fee = calculateFee(activeSession.entryTime, exitTime);
+        const fee = calculateParkingFee(activeSession.entryTime, exitTime);
 
         activeSession.fee = fee;
         activeSession.status = "completed";
